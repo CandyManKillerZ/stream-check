@@ -599,10 +599,9 @@ async function phonePair(text) {
   try {
     const r = await Core.pairWithPC(text, (s) => steps[s] && show(s));
     const what = [r.torbox && 'TorBox', r.aio && `AIOStreams${r.aioMode === 'login' ? ' (with addon checks)' : ''}`].filter(Boolean).join(' and ');
-    pairModalMessage('ok', 'Signed in', what ? `Copied ${what} from your PC.` : 'Your PC had no sign-ins to copy.');
+    pairModalMessage('ok', 'Signed in', what ? `Copied ${what} from your PC. Press Check now whenever something will not play.` : 'Your PC had no sign-ins to copy.');
     state.torboxInfo = null;
     await renderAccounts(true);
-    runCheck();
   } catch (e) {
     pairModalMessage('down', 'Pairing did not work', String(e?.message || e));
   }
@@ -628,5 +627,6 @@ window.addEventListener('unhandledrejection', (e) => setVerdict({ level: 'down',
     showPage('accounts');
     toast(Native.name === 'android' ? 'Sign in here — or scan the QR code from Stream Check on your PC' : 'Sign in to TorBox and AIOStreams to get the full check');
   }
-  runCheck();
+  // No automatic check: every check hits TorBox, every CDN and a real
+  // AIOStreams search, so it only runs when the user presses Check now.
 })();

@@ -1,6 +1,6 @@
 {
   "name": "stream-check",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Is TorBox, AIOStreams (and its addons) or Nuvio down? One tap tells you. Made by CMK.",
   "private": true,
   "license": "MIT",
