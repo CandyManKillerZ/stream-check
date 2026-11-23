@@ -18,7 +18,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-const userAgent = "StreamCheck/1.1 (+https://github.com/CandyManKillerZ/stream-check)"
+const userAgent = "StreamCheck/1.2 (+https://github.com/CandyManKillerZ/stream-check)"
 
 type App struct{ ctx context.Context }
 

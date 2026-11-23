@@ -32,6 +32,7 @@ When you stream with **Nuvio + TorBox + AIOStreams**, a video that won't start c
 | **AIOStreams** | Whether your AIOStreams server is up, whether your config still loads, and a **real test search**: the same request Nuvio makes. |
 | **AIOStreams addons** | Every scraper/addon in your config (Comet, Torrentio, MediaFusion, StremThru, …): which ones return streams, which return nothing and which are **failing**, with the error each one reports. |
 | **Nuvio** | The metadata services Nuvio relies on (TMDB, Cinemeta) and the Nuvio website. |
+| **Wi-Fi pairing** | Signed in on your PC? Scan one QR code with your phone and it is signed in too: sent directly over your Wi-Fi, encrypted, only after you click Allow. |
 | **Test a title** | Paste an IMDb link or id (or a show with season + episode) to see whether *that exact title* finds streams, and from which addons. |
 
 | TorBox CDNs | TorBox announcements |
@@ -68,10 +69,26 @@ Open **Accounts** in the app.
 
 You can use Stream Check without signing in; it then checks everything that is public (TorBox status, CDNs, Nuvio's services).
 
+### Sign in on your phone with one scan (Wi-Fi pairing)
+
+Already signed in on your PC? You don't have to type anything on your phone:
+
+1. On the PC: **Accounts → Show QR code**.
+2. On the phone: open Stream Check → **Accounts → Scan QR code**. (No app yet? Scan the code with your normal camera; the page that opens offers the download, then **Open in Stream Check**.)
+3. On the PC, check the phone's name and click **Allow**.
+
+How it stays safe:
+- Your sign-ins travel **directly from your PC to your phone over your own Wi-Fi**. Nothing goes through the internet or any server.
+- They are encrypted with a one-time key that exists **only inside the QR code**, never on the network.
+- Nothing is sent until you click **Allow** on the PC, and you see which phone is asking.
+- The QR code works **once** and for **2 minutes**; after that the PC stops listening.
+
+Both devices must be on the same Wi-Fi. The first time, Windows asks whether Stream Check may use the network: allow it on **private networks**. If your PC runs a VPN, allow "local network access" in the VPN's settings.
+
 ## Your data stays on your device
 
 - Your API key, UUID and password are stored **only on your device**, encrypted: with **Windows DPAPI** on PC (only your Windows account can read them) and the **Android Keystore** on phones.
-- They are sent **only** to TorBox (`api.torbox.app`) and to **your own** AIOStreams server, never anywhere else.
+- They are sent **only** to TorBox (`api.torbox.app`), to **your own** AIOStreams server and, when you pair a phone and click Allow, **directly to that phone over your Wi-Fi**. Never anywhere else.
 - Stream Check has **no server of its own**, no analytics and no tracking. Everything happens on your device.
 
 ## FAQ
@@ -94,10 +111,13 @@ Everything (checks, UI, logic) lives in [`web/`](web) and is shared by both apps
 
 ```
 web/        shared UI + all check logic (core.js), platform adapter (platform.js)
-desktop/    Windows app: Go + Wails (native.go, store.go)
+desktop/    Windows app: Go + Wails (native.go, store.go, pair.go = Wi-Fi pairing)
 android/    Android app: Capacitor 8 + NetProbe plugin (Java)
 scripts/    build scripts
+docs/       GitHub Pages: the page the pairing QR code opens on phones (docs/pair/)
 ```
+
+Third-party code: [jsQR](https://github.com/cozmo/jsQR) (Apache-2.0, `web/vendor/`), [go-qrcode](https://github.com/skip2/go-qrcode) (MIT), Wails, Capacitor.
 
 **Windows**: needs [Go 1.23+](https://go.dev/dl/), [Node.js 18+](https://nodejs.org/) and the [Wails CLI](https://wails.io/docs/gettingstarted/installation):
 ```powershell

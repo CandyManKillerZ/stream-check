@@ -334,3 +334,28 @@ ul.plain li { margin: 6px 0; }
   .toast { bottom: calc(90px + var(--safe-area-inset-bottom, 0px)); }
 }
 .quiet > span:nth-child(2) { flex: 1 1 200px; min-width: 0; }
+
+/* ---------- v1.2 Wi-Fi pairing ---------- */
+.pair-card { display: flex; align-items: center; gap: 16px; margin-bottom: 14px; }
+.pair-icon { width: 44px; height: 44px; border-radius: 11px; background: var(--green-bg); display: grid; place-items: center; flex: none; }
+.pair-icon svg { width: 24px; height: 24px; fill: none; stroke: var(--green); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.pair-text { flex: 1; min-width: 0; }
+.modal { position: fixed; inset: 0; z-index: 40; background: rgba(5, 6, 9, .72); display: grid; place-items: center; padding: 20px; }
+.modal-box { width: min(440px, 100%); max-height: calc(100vh - 40px); overflow-y: auto; padding: 22px; }
+.pair-modal { text-align: center; }
+.pair-qr { width: 260px; height: 260px; display: block; margin: 14px auto; border-radius: 12px; background: #fff; padding: 10px; image-rendering: pixelated; }
+.pair-status { display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: 500; }
+.pair-steps { text-align: left; color: var(--text); font-size: 13.5px; padding-left: 20px; margin: 16px 0; }
+.pair-steps li { margin: 7px 0; }
+.pair-device { font-size: 18px; font-weight: 700; color: var(--green); margin-top: 10px; }
+.pair-result { margin: 0 auto 12px; }
+.pair-result.lv-ok { background: var(--green-bg); } .pair-result.lv-ok svg { stroke: var(--green); }
+.pair-result.lv-warn { background: var(--amber-bg); } .pair-result.lv-warn svg { stroke: var(--amber); }
+.pair-result.lv-down { background: var(--red-bg); } .pair-result.lv-down svg { stroke: var(--red); }
+.scan-box { position: relative; margin: 14px auto; width: 100%; aspect-ratio: 1; max-width: 320px; border-radius: 14px; overflow: hidden; background: #000; }
+.scan-box video { width: 100%; height: 100%; object-fit: cover; }
+.scan-frame { position: absolute; inset: 14%; border: 3px solid var(--green); border-radius: 14px; box-shadow: 0 0 0 999px rgba(0,0,0,.35); }
+@media (max-width: 760px) {
+  .pair-card { flex-wrap: wrap; }
+  .pair-card .btn { width: 100%; }
+}

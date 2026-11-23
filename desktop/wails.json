@@ -7,7 +7,7 @@
   "info": {
     "companyName": "CMK",
     "productName": "Stream Check",
-    "productVersion": "1.1.0",
+    "productVersion": "1.2.0",
     "copyright": "Made by CMK",
     "comments": "Checks TorBox, AIOStreams (and its addons) and Nuvio's services"
   }

@@ -128,11 +128,12 @@
 
     <!-- ACCOUNTS -->
     <section class="page" id="page-accounts" hidden>
+      <div id="pair-card"></div>
       <div class="grid two">
         <div class="card pad" id="acct-torbox"></div>
         <div class="card pad" id="acct-aio"></div>
       </div>
-      <p class="muted small privacy">Your API key and password are stored only on this device, encrypted (Windows DPAPI on PC, the Android Keystore on phones). They are sent only to TorBox and to your own AIOStreams server — never anywhere else.</p>
+      <p class="muted small privacy">Your API key and password are stored only on this device, encrypted (Windows DPAPI on PC, the Android Keystore on phones). They are sent only to TorBox, to your own AIOStreams server and — when you pair a phone and click Allow — straight to that phone over your own Wi-Fi. Never anywhere else.</p>
     </section>
 
     <!-- ABOUT -->
@@ -155,14 +156,16 @@
         <div class="card-title" style="margin-bottom:8px">Good to know</div>
         <ul class="plain">
           <li>Free and open source. Stream Check has no server of its own and collects nothing.</li>
-          <li>Your logins never leave this device except to talk to TorBox and your own AIOStreams server.</li>
+          <li>Your logins never leave this device except to talk to TorBox and your own AIOStreams server, or to go to your own phone when you pair it over Wi-Fi.</li>
           <li>Stream Check is an independent tool. It is not made by, or affiliated with, TorBox, AIOStreams or Nuvio.</li>
         </ul>
       </div>
     </section>
   </main>
 
+  <div class="modal" id="modal" hidden><div class="modal-box card" id="modal-box"></div></div>
   <div class="toast" id="toast" hidden></div>
+  <script src="vendor/jsQR.js"></script>
   <script src="platform.js"></script>
   <script src="core.js"></script>
   <script src="ui.js"></script>

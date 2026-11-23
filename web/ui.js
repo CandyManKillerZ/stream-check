@@ -2,7 +2,7 @@
 // Stream Check UI — renders what Core (core.js) reports. Everything that came
 // from the network goes through esc() before it touches innerHTML.
 
-const VERSION = '1.1.0';
+const VERSION = APP_VERSION;
 const REPO_URL = 'https://github.com/CandyManKillerZ/stream-check';
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -372,6 +372,7 @@ async function refreshAccounts() {
 
 async function renderAccounts(fetchInfo) {
   const a = await refreshAccounts();
+  renderPairCard(a);
   const tb = $('acct-torbox');
   const tbHead = (on) => `<div class="acct-head"><div class="acct-logo tb">TB</div><div><div class="card-title">TorBox</div><div class="muted small">API key login</div></div>
     <span class="pill ${on ? 'lv-ok' : ''}">${on ? 'Signed in' : 'Signed out'}</span></div>`;
@@ -463,6 +464,150 @@ document.addEventListener('click', (e) => {
   b.textContent = inp.type === 'password' ? 'show' : 'hide';
 });
 
+// ---------------------------------------------------------------- Wi-Fi pairing
+// PC: shows a QR code and asks Allow / Deny.  Phone: scans it and receives the
+// sign-ins straight from the PC over the local network (see desktop/pair.go).
+const PAIR_ICON = '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 17h4v4h-4"/></svg>';
+
+function renderPairCard(a) {
+  const el = $('pair-card');
+  if (Native.canHostPairing()) {
+    const has = a.torbox || a.aioMode;
+    el.innerHTML = `<div class="card pad pair-card">
+      <div class="pair-icon">${PAIR_ICON}</div>
+      <div class="pair-text"><div class="card-title">Sign in on your phone</div>
+        <div class="muted small">${has ? 'Show a QR code and scan it with the Stream Check app on your phone. Your sign-ins go straight from this PC to the phone over your Wi-Fi — only after you click Allow.' : 'Sign in here first, then you can copy your sign-ins to your phone with one scan.'}</div></div>
+      <button class="btn primary" id="pair-start" ${has ? '' : 'disabled'}>Show QR code</button>
+    </div>`;
+    $('pair-start').onclick = openPcPairing;
+  } else if (Native.name === 'android') {
+    el.innerHTML = `<div class="card pad pair-card">
+      <div class="pair-icon">${PAIR_ICON}</div>
+      <div class="pair-text"><div class="card-title">Sign in from your PC</div>
+        <div class="muted small">Already signed in on your PC? Open Stream Check there → Accounts → <b>Show QR code</b>, then scan it here. Both devices must be on the same Wi-Fi.</div></div>
+      <button class="btn primary" id="pair-scan">Scan QR code</button>
+    </div>`;
+    $('pair-scan').onclick = openScanner;
+  } else el.innerHTML = '';
+}
+
+function modal(html) {
+  $('modal-box').innerHTML = html;
+  $('modal').hidden = false;
+}
+function closeModal() { $('modal').hidden = true; $('modal-box').innerHTML = ''; }
+
+// ---- PC side
+let pairTimer = null;
+async function openPcPairing() {
+  modal('<div class="pair-modal"><div class="skel" style="width:60%"></div><div class="skel" style="width:40%"></div></div>');
+  const info = await Native.startPairing();
+  if (info.error) return pairModalMessage('down', 'Could not start pairing', info.error);
+  const end = Date.parse(info.expiresAt);
+  modal(`<div class="pair-modal">
+    <div class="card-title">Scan with your phone</div>
+    <img class="pair-qr" src="${esc(info.qr)}" alt="Pairing QR code" />
+    <div class="pair-status" id="pair-status"><span class="spin dim"></span> Waiting for your phone… <span class="muted" id="pair-left"></span></div>
+    <ol class="pair-steps">
+      <li>On your phone, open <b>Stream Check</b> → Accounts → <b>Scan QR code</b>.<br><span class="muted small">No app yet? Scan with the camera — it offers the download.</span></li>
+      <li>Keep the phone on the same Wi-Fi as this PC (${esc(info.hosts.join(', '))}).</li>
+      <li>If Windows asks, allow Stream Check on <b>private networks</b>.</li>
+    </ol>
+    <button class="btn ghost" id="pair-cancel">Cancel</button>
+  </div>`);
+  $('pair-cancel').onclick = () => { Native.stopPairing(); stopPairTimer(); closeModal(); };
+  stopPairTimer();
+  pairTimer = setInterval(() => {
+    const s = Math.max(0, Math.round((end - Date.now()) / 1000));
+    const left = $('pair-left');
+    if (left) left.textContent = `· ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')} left`;
+  }, 500);
+}
+function stopPairTimer() { clearInterval(pairTimer); pairTimer = null; }
+
+function pairModalMessage(level, title, text) {
+  stopPairTimer();
+  modal(`<div class="pair-modal">
+    <div class="v-icon pair-result lv-${level}">${ICONS[level] || ICONS.idle}</div>
+    <div class="card-title">${esc(title)}</div>
+    <div class="muted" style="margin:6px 0 16px">${esc(text)}</div>
+    <button class="btn primary" id="pair-close">Close</button>
+  </div>`);
+  $('pair-close').onclick = closeModal;
+}
+
+function onPairEvent(e) {
+  if ($('modal').hidden) return;
+  if (e.state === 'request') {
+    stopPairTimer();
+    modal(`<div class="pair-modal">
+      <div class="card-title">Allow this phone?</div>
+      <div class="pair-device">${esc(e.device)}</div>
+      <div class="muted" style="margin:6px 0 16px">wants to copy your TorBox and AIOStreams sign-ins from this PC. Only allow it if this is your phone and you just scanned the code.</div>
+      <div class="row center"><button class="btn primary" id="pair-allow">Allow</button><button class="btn danger" id="pair-deny">Deny</button></div>
+    </div>`);
+    $('pair-allow').onclick = () => { Native.answerPairing(true); modal('<div class="pair-modal"><span class="spin dim"></span> Sending…</div>'); };
+    $('pair-deny').onclick = () => Native.answerPairing(false);
+  } else if (e.state === 'done') pairModalMessage('ok', 'Phone signed in', `${e.device} now has your sign-ins. You can close this window.`);
+  else if (e.state === 'denied') pairModalMessage('warn', 'Pairing refused', 'Nothing was sent to the phone.');
+  else if (e.state === 'expired') pairModalMessage('warn', 'QR code expired', 'Nothing was sent. Click Show QR code to try again.');
+}
+
+// ---- phone side
+let scanStream = null, scanLoop = null;
+async function openScanner() {
+  modal(`<div class="pair-modal">
+    <div class="card-title">Scan the QR code on your PC</div>
+    <div class="scan-box"><video id="scan-video" playsinline muted></video><div class="scan-frame"></div></div>
+    <div class="muted small" id="scan-msg">Point your camera at the QR code.</div>
+    <button class="btn ghost" id="scan-cancel">Cancel</button>
+  </div>`);
+  $('scan-cancel').onclick = () => { stopScanner(); closeModal(); };
+  try {
+    scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+  } catch (e) {
+    $('scan-msg').innerHTML = `<span class="ms-bad">Camera not available (${esc(e.name || e.message || e)}).</span> Allow camera access for Stream Check in Android settings, or scan the code with your normal camera app instead.`;
+    return;
+  }
+  const video = $('scan-video');
+  video.srcObject = scanStream;
+  await video.play().catch(() => {});
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  scanLoop = setInterval(() => {
+    if (!video.videoWidth) return;
+    const w = Math.min(640, video.videoWidth), h = Math.round(video.videoHeight * (w / video.videoWidth));
+    canvas.width = w; canvas.height = h;
+    ctx.drawImage(video, 0, 0, w, h);
+    const code = jsQR(ctx.getImageData(0, 0, w, h).data, w, h, { inversionAttempts: 'dontInvert' });
+    if (code?.data) {
+      try { Core.parsePair(code.data); } catch (e) { $('scan-msg').textContent = e.message; return; }
+      stopScanner();
+      phonePair(code.data);
+    }
+  }, 200);
+}
+function stopScanner() {
+  clearInterval(scanLoop); scanLoop = null;
+  scanStream?.getTracks().forEach((t) => t.stop()); scanStream = null;
+}
+
+async function phonePair(text) {
+  const steps = { connecting: 'Looking for your PC on the Wi-Fi…', waiting: 'Found it — now click <b>Allow</b> on your PC.' };
+  const show = (state) => modal(`<div class="pair-modal"><span class="spin dim"></span><div style="margin-top:10px">${steps[state] || ''}</div></div>`);
+  show('connecting');
+  try {
+    const r = await Core.pairWithPC(text, (s) => steps[s] && show(s));
+    const what = [r.torbox && 'TorBox', r.aio && `AIOStreams${r.aioMode === 'login' ? ' (with addon checks)' : ''}`].filter(Boolean).join(' and ');
+    pairModalMessage('ok', 'Signed in', what ? `Copied ${what} from your PC.` : 'Your PC had no sign-ins to copy.');
+    state.torboxInfo = null;
+    await renderAccounts(true);
+    runCheck();
+  } catch (e) {
+    pairModalMessage('down', 'Pairing did not work', String(e?.message || e));
+  }
+}
+
 // ---------------------------------------------------------------- start
 window.addEventListener('error', (e) => setVerdict({ level: 'down', title: 'Stream Check hit a bug', message: String(e.message) }));
 window.addEventListener('unhandledrejection', (e) => setVerdict({ level: 'down', title: 'Stream Check hit a bug', message: String(e.reason?.message || e.reason) }));
@@ -475,10 +620,13 @@ window.addEventListener('unhandledrejection', (e) => setVerdict({ level: 'down',
   $('about-platform').textContent = { windows: 'Windows', android: 'Android', browser: 'Browser preview' }[plat.name] || plat.name;
   renderCards();
   renderStatus();
+  Native.onPair(onPairEvent);
+  Native.onLink((url) => { if (/pair/i.test(url)) { showPage('accounts'); phonePair(url); } });
   const a = await refreshAccounts();
+  renderPairCard(a);
   if (!a.torbox && !a.aioMode) {
     showPage('accounts');
-    toast('Sign in to TorBox and AIOStreams to get the full check');
+    toast(Native.name === 'android' ? 'Sign in here — or scan the QR code from Stream Check on your PC' : 'Sign in to TorBox and AIOStreams to get the full check');
   }
   runCheck();
 })();

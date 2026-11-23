@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.net.Uri;
+import android.os.Build;
 import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
 import android.util.Base64;
@@ -39,7 +40,7 @@ import javax.crypto.spec.GCMParameterSpec;
 public class NetProbePlugin extends Plugin {
     private static final String KEY_ALIAS = "streamcheck_secrets";
     private static final String PREFS = "streamcheck_secure";
-    private static final String UA = "StreamCheck/1.1 (Android)";
+    private static final String UA = "StreamCheck/1.2 (Android)";
     private final ExecutorService pool = Executors.newFixedThreadPool(10);
 
     // ------------------------------------------------------------ TCP ping
@@ -181,6 +182,21 @@ public class NetProbePlugin extends Plugin {
                 .setKeySize(256)
                 .build());
         return kg.generateKey();
+    }
+
+    // ------------------------------------------------------------ device name (shown in the PC's "Allow this phone?" prompt)
+    @PluginMethod
+    public void deviceName(PluginCall call) {
+        String maker = Build.MANUFACTURER == null ? "" : Build.MANUFACTURER;
+        String model = Build.MODEL == null ? "Android phone" : Build.MODEL;
+        String name = model.toLowerCase().startsWith(maker.toLowerCase()) ? model : (maker.isEmpty() ? model : capitalize(maker) + " " + model);
+        JSObject r = new JSObject();
+        r.put("name", name);
+        call.resolve(r);
+    }
+
+    private static String capitalize(String s) {
+        return s.isEmpty() ? s : Character.toUpperCase(s.charAt(0)) + s.substring(1);
     }
 
     // ------------------------------------------------------------ links

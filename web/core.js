@@ -533,6 +533,51 @@ const Core = (() => {
     finally { running = false; }
   }
 
+  // ---------------------------------------------------------------- Wi-Fi pairing (phone side)
+  // The PC's QR code holds https://…/pair/#<payload> (or streamcheck://pair?d=<payload>).
+  // payload = base64url(JSON {v, h:[LAN IPs], p:port, t:pairing id, k:AES-256 key}).
+  const b64urlToBytes = (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4)), (c) => c.charCodeAt(0));
+
+  function parsePair(text) {
+    const s = String(text || '').trim();
+    const m = s.match(/[#?&]d=([A-Za-z0-9_-]+)/) || s.match(/#([A-Za-z0-9_-]{40,})$/) || s.match(/^([A-Za-z0-9_-]{40,})$/);
+    if (!m) throw new Error('This is not a Stream Check pairing code.');
+    let p;
+    try { p = JSON.parse(new TextDecoder().decode(b64urlToBytes(m[1]))); } catch { throw new Error('This pairing code is damaged — show a new one on your PC.'); }
+    if (p.v !== 1 || !Array.isArray(p.h) || !p.h.length || !p.p || !p.t || !p.k) throw new Error('This pairing code is from a newer or older Stream Check — update both apps.');
+    return p;
+  }
+
+  async function pairWithPC(text, onStatus = () => {}) {
+    const p = parsePair(text);
+    const hosts = p.h.filter((h) => /^\d{1,3}(\.\d{1,3}){3}$/.test(h));
+    onStatus('connecting');
+    const base = await Promise.any(hosts.map(async (h) => {
+      const r = await get(`http://${h}:${p.p}/hello?id=${encodeURIComponent(p.t)}`, { timeoutMs: 4000 });
+      if (!r.ok || r.json?.app !== 'stream-check') throw new Error('no');
+      return `http://${h}:${p.p}`;
+    })).catch(() => {
+      throw new Error('Could not reach your PC. Make sure your phone is on the same Wi-Fi as the PC, the QR code is less than 2 minutes old, and Windows Firewall allowed Stream Check. Using a VPN on the PC? Allow local network access in its settings.');
+    });
+    onStatus('waiting');
+    const r = await Native.http({ method: 'POST', url: base + '/pair', json: { id: p.t, device: await Native.deviceName() }, timeoutMs: 100000 });
+    let body = null;
+    try { body = JSON.parse(r.body); } catch {}
+    if (r.status === 403) throw new Error(`Not allowed — ${body?.error || 'the PC said no'}.`);
+    if (r.status === 410) throw new Error('This QR code was already used — show a new one on your PC.');
+    if (r.error || r.status !== 200 || !body?.iv || !body?.ct) throw new Error(`Pairing failed (${r.error || 'HTTP ' + r.status}).`);
+    const key = await crypto.subtle.importKey('raw', b64urlToBytes(p.k), 'AES-GCM', false, ['decrypt']);
+    let creds;
+    try {
+      const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64urlToBytes(body.iv) }, key, b64urlToBytes(body.ct));
+      creds = JSON.parse(new TextDecoder().decode(plain));
+    } catch { throw new Error('Could not unlock the sign-ins from your PC — show a new QR code and try again.'); }
+    const clean = Object.fromEntries(KEYS.map((k) => [k, typeof creds[k] === 'string' ? creds[k] : '']));
+    await save(clean);
+    onStatus('done');
+    return { torbox: !!clean.torboxKey, aio: !!clean.aioManifestUrl, aioMode: clean.aioMode };
+  }
+
   // ---------------------------------------------------------------- account actions
   async function loginTorbox(key) {
     key = String(key || '').trim();
@@ -568,6 +613,7 @@ const Core = (() => {
   return {
     accounts, runChecks, refreshCDNs, speedTest, testTitle,
     loginTorbox, logoutTorbox, torboxAccount, loginAio, loginAioManifest, logoutAio,
+    parsePair, pairWithPC,
     savedInstance: async () => (await cfg()).aioInstance,
   };
 })();

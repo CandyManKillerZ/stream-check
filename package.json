@@ -1,6 +1,6 @@
 {
   "name": "stream-check",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Is TorBox, AIOStreams (and its addons) or Nuvio down? One tap tells you. Made by CMK.",
   "private": true,
   "license": "MIT",
@@ -12,9 +12,11 @@
   },
   "dependencies": {
     "@capacitor/android": "^8.6.2",
+    "@capacitor/app": "^8.1.2",
     "@capacitor/core": "^8.6.2"
   },
   "devDependencies": {
-    "@capacitor/cli": "^8.6.2"
+    "@capacitor/cli": "^8.6.2",
+    "jsqr": "^1.4.0"
   }
 }

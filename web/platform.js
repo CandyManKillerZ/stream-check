@@ -1,9 +1,11 @@
 'use strict';
 // Platform adapter — the only file that knows where Stream Check is running:
-//   windows : Wails shell (desktop/native.go)          window.go.main.App.*
-//   android : Capacitor shell (NetProbe Java plugin)   window.Capacitor.Plugins.*
+//   windows : Wails shell (desktop/native.go, pair.go)   window.go.main.App.*
+//   android : Capacitor shell (NetProbe Java plugin)     window.Capacitor.Plugins.*
 //   browser : plain page for UI development (CORS will block most checks)
 // Every function resolves (never rejects); failures come back as `error` text.
+
+const APP_VERSION = '1.2.0';
 
 const Native = (() => {
   const wailsApp = () => window.go?.main?.App;
@@ -25,8 +27,15 @@ const Native = (() => {
 
   const windows = {
     name: 'windows',
-    init() { window.runtime.EventsOn('speed', (s) => speedListeners.get(s.id)?.(s)); },
-    http: (o) => wailsApp().HTTP({ method: o.method || 'GET', url: o.url, headers: o.headers || {}, body: o.body || '', timeoutMs: o.timeoutMs || 15000 }),
+    init() {
+      window.runtime.EventsOn('speed', (s) => speedListeners.get(s.id)?.(s));
+      window.runtime.EventsOn('pair', (e) => pairListeners.forEach((cb) => cb(e)));
+    },
+    http: (o) => wailsApp().HTTP({
+      method: o.method || 'GET', url: o.url, timeoutMs: o.timeoutMs || 15000,
+      headers: { ...(o.json ? { 'Content-Type': 'application/json' } : {}), ...(o.headers || {}) },
+      body: o.json ? JSON.stringify(o.json) : o.body || '',
+    }),
     ping: (host, port, timeoutMs) => wailsApp().TCPPing(host, port, timeoutMs),
     async speed(id, url, seconds, onProgress) {
       speedListeners.set(id, onProgress);
@@ -35,6 +44,12 @@ const Native = (() => {
     get: (k) => wailsApp().StoreGet(k),
     set: (k, v) => wailsApp().StoreSet(k, v || ''),
     open: (u) => wailsApp().OpenURL(u),
+    deviceName: async () => 'PC',
+    onLink() {},
+    // Wi-Fi pairing — this PC hands its sign-ins to a phone (desktop/pair.go)
+    startPairing: () => wailsApp().StartPairing(),
+    answerPairing: (allow) => wailsApp().AnswerPairing(allow),
+    stopPairing: () => wailsApp().StopPairing(),
   };
 
   const android = {
@@ -45,8 +60,8 @@ const Native = (() => {
       try {
         const r = await cap().Plugins.CapacitorHttp.request({
           url: o.url, method: o.method || 'GET',
-          headers: { 'User-Agent': 'StreamCheck/1.1 (Android)', ...(o.headers || {}) },
-          data: o.body || undefined,
+          headers: { 'User-Agent': `StreamCheck/${APP_VERSION} (Android)`, ...(o.json ? { 'Content-Type': 'application/json' } : {}), ...(o.headers || {}) },
+          data: o.json || o.body || undefined,
           connectTimeout: o.timeoutMs || 15000, readTimeout: o.timeoutMs || 15000,
           responseType: 'text',
         });
@@ -73,6 +88,16 @@ const Native = (() => {
     },
     set: (k, v) => cap().Plugins.NetProbe.secureSet({ key: k, value: v || '' }),
     open: (u) => cap().Plugins.NetProbe.openUrl({ url: u }),
+    async deviceName() {
+      try { return (await cap().Plugins.NetProbe.deviceName()).name || 'Android phone'; } catch { return 'Android phone'; }
+    },
+    // streamcheck://pair?d=… links (from the QR code's web page) open the app.
+    onLink(cb) {
+      const App = cap().Plugins.App;
+      if (!App) return;
+      App.addListener('appUrlOpen', (e) => e?.url && cb(e.url));
+      App.getLaunchUrl?.().then((r) => r?.url && cb(r.url)).catch(() => {});
+    },
   };
 
   const browser = {
@@ -81,7 +106,11 @@ const Native = (() => {
     async http(o) {
       const t0 = performance.now();
       try {
-        const r = await fetch(o.url, { method: o.method || 'GET', headers: o.headers, body: o.body || undefined, signal: AbortSignal.timeout(o.timeoutMs || 15000) });
+        const r = await fetch(o.url, {
+          method: o.method || 'GET', signal: AbortSignal.timeout(o.timeoutMs || 15000),
+          headers: { ...(o.json ? { 'Content-Type': 'application/json' } : {}), ...(o.headers || {}) },
+          body: o.json ? JSON.stringify(o.json) : o.body || undefined,
+        });
         return { status: r.status, body: await r.text(), ms: Math.round(performance.now() - t0), error: '' };
       } catch (e) { return { status: 0, body: '', ms: Math.round(performance.now() - t0), error: friendly(e) }; }
     },
@@ -90,8 +119,11 @@ const Native = (() => {
     get: async (k) => localStorage.getItem('sc_' + k) || '',
     set: async (k, v) => (v ? localStorage.setItem('sc_' + k, v) : localStorage.removeItem('sc_' + k)),
     open: (u) => window.open(u, '_blank'),
+    deviceName: async () => 'Browser',
+    onLink() {},
   };
 
+  const pairListeners = new Set();
   let impl = null;
   async function ready() {
     if (impl) return impl;
@@ -114,5 +146,12 @@ const Native = (() => {
     get: (k) => impl.get(k),
     set: (k, v) => impl.set(k, v),
     open: (u) => { if (/^https?:\/\//.test(u)) impl.open(u); },
+    deviceName: () => impl.deviceName(),
+    onLink: (cb) => impl.onLink(cb),
+    canHostPairing: () => !!impl?.startPairing,
+    startPairing: () => impl.startPairing(),
+    answerPairing: (allow) => impl.answerPairing(allow),
+    stopPairing: () => impl.stopPairing?.(),
+    onPair: (cb) => pairListeners.add(cb),
   };
 })();

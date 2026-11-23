@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="referrer" content="no-referrer" />
+  <meta name="robots" content="noindex" />
+  <meta name="theme-color" content="#12141b" />
+  <title>Pair your phone · Stream Check</title>
+  <link rel="icon" href="../icon.png" />
+  <!--
+    The pairing details live in the part of this page's address after "#".
+    Browsers never send that part to the server, and this page loads nothing
+    from anywhere else, so GitHub never sees it.
+  -->
+  <style>
+    :root { --bg:#12141b; --card:#1a1d26; --line:#262a33; --text:#e8eaf0; --muted:#8a90a2; --green:#04bf8a; --green-d:#039f75; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--text); font: 15px/1.5 Inter, "Segoe UI", system-ui, sans-serif; display: grid; place-items: center; padding: 22px; }
+    .card { width: min(440px, 100%); background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 26px 22px; text-align: center; }
+    .logo { width: 64px; height: 64px; }
+    h1 { font-size: 22px; margin: 10px 0 4px; letter-spacing: -.01em; }
+    p { color: var(--muted); margin: 8px 0; }
+    .btn { display: block; width: 100%; margin-top: 12px; padding: 13px 16px; border-radius: 11px; font: inherit; font-weight: 650; text-decoration: none; border: 1px solid transparent; cursor: pointer; }
+    .primary { background: var(--green); color: #fff; }
+    .primary:active { background: var(--green-d); }
+    .ghost { background: transparent; color: var(--text); border-color: #2f3340; }
+    ol { text-align: left; color: var(--text); padding-left: 20px; margin: 16px 0 4px; }
+    li { margin: 7px 0; }
+    .small { font-size: 12.5px; color: var(--muted); }
+    .credit { margin-top: 18px; font-size: 12.5px; color: var(--muted); }
+    .credit b { color: var(--green); }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#04BF8A"/><path d="M6 17h5l2.5-6 4.5 12 2.5-6H26" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <h1>Stream Check</h1>
+
+    <div id="android" hidden>
+      <p>Your PC wants to copy its TorBox and AIOStreams sign-ins to this phone.</p>
+      <a class="btn primary" id="open">Open in Stream Check</a>
+      <a class="btn ghost" id="download" href="https://github.com/CandyManKillerZ/stream-check/releases/latest">Don’t have the app? Download it</a>
+      <ol>
+        <li>No app yet: download it, open the file and tap <b>Install</b> (allow your browser to install apps if Android asks).</li>
+        <li>Come back to this page and tap <b>Open in Stream Check</b>.</li>
+        <li>Click <b>Allow</b> on your PC.</li>
+      </ol>
+      <p class="small">The code works for 2 minutes. Expired? Show a new QR code on your PC and scan it again.</p>
+    </div>
+
+    <div id="other" hidden>
+      <p>Pairing copies your sign-ins from Stream Check on your PC to the <b>Android</b> app. Open this page on your Android phone by scanning the QR code with its camera.</p>
+      <a class="btn primary" href="https://github.com/CandyManKillerZ/stream-check/releases/latest">Download Stream Check</a>
+    </div>
+
+    <div id="nocode" hidden>
+      <p>This page is used to pair a phone with Stream Check on your PC. Open Stream Check on your PC → <b>Accounts</b> → <b>Show QR code</b>, and scan it with your phone.</p>
+      <a class="btn primary" href="https://github.com/CandyManKillerZ/stream-check">About Stream Check</a>
+    </div>
+
+    <div class="credit">Made by <b>CMK</b></div>
+  </div>
+
+  <script>
+    (function () {
+      var payload = (location.hash || '').replace(/^#/, '');
+      var valid = /^[A-Za-z0-9_-]{40,}$/.test(payload);
+      var android = /Android/i.test(navigator.userAgent);
+      var show = function (id) { document.getElementById(id).hidden = false; };
+      if (!valid) return show('nocode');
+      if (!android) return show('other');
+      show('android');
+      var releases = 'https://github.com/CandyManKillerZ/stream-check/releases/latest';
+      document.getElementById('open').href =
+        'intent://pair?d=' + payload + '#Intent;scheme=streamcheck;package=com.cmk.streamcheck;' +
+        'S.browser_fallback_url=' + encodeURIComponent(releases) + ';end';
+    })();
+  </script>
+</body>
+</html>
