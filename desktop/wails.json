@@ -1,0 +1,14 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "Stream Check",
+  "outputfilename": "Stream Check",
+  "frontend:install": "",
+  "frontend:build": "node ../../scripts/sync-web.mjs",
+  "info": {
+    "companyName": "CMK",
+    "productName": "Stream Check",
+    "productVersion": "1.1.0",
+    "copyright": "Made by CMK",
+    "comments": "Checks TorBox, AIOStreams (and its addons) and Nuvio's services"
+  }
+}

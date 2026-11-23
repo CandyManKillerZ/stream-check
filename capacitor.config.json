@@ -1,0 +1,14 @@
+{
+  "appId": "com.cmk.streamcheck",
+  "appName": "Stream Check",
+  "webDir": "web",
+  "backgroundColor": "#12141b",
+  "android": {
+    "allowMixedContent": false
+  },
+  "plugins": {
+    "SystemBars": {
+      "style": "DARK"
+    }
+  }
+}

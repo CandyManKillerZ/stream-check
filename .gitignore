@@ -1,0 +1,25 @@
+# dependencies & build output
+node_modules/
+dist/
+desktop/build/bin/
+desktop/frontend/dist/
+desktop/frontend/wailsjs/
+android/app/src/main/assets/public/
+
+# secrets: never commit
+android/keystore.properties
+*.jks
+*.keystore
+*.p12
+*.pfx
+.env
+.env.*
+config.json
+!android/**/config.json
+
+# editor / OS
+.vscode/
+.idea/
+*.log
+Thumbs.db
+.DS_Store

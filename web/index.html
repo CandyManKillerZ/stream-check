@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#12141b" />
+  <title>Stream Check</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <aside class="side">
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 32 32" aria-hidden="true">
+        <rect width="32" height="32" rx="8" fill="#04BF8A"/>
+        <path d="M6 17h5l2.5-6 4.5 12 2.5-6H26" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <div>
+        <div class="brand-name">Stream Check</div>
+        <div class="brand-sub">TorBox · AIOStreams · Nuvio</div>
+      </div>
+    </div>
+
+    <nav>
+      <button class="nav active" data-page="overview">
+        <svg viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg><span>Overview</span>
+      </button>
+      <button class="nav" data-page="news">
+        <svg viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4z"/><path d="M8 9h8M8 12h5"/></svg><span>Announcements</span>
+        <span class="badge" id="news-badge" hidden>0</span>
+      </button>
+      <button class="nav" data-page="cdns">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.2 3 14.8 0 18M12 3c-3 3.2-3 14.8 0 18"/></svg><span>TorBox CDNs</span>
+      </button>
+      <button class="nav" data-page="addons">
+        <svg viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><path d="M16.5 13v7M13 16.5h7"/></svg><span>Addons</span>
+      </button>
+      <button class="nav" data-page="title">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><span>Test a title</span>
+      </button>
+      <button class="nav" data-page="accounts">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg><span>Accounts</span>
+        <span class="dot-mini" id="acct-dot" hidden></span>
+      </button>
+      <button class="nav" data-page="about">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5h.01"/></svg><span>About</span>
+      </button>
+    </nav>
+
+    <div class="side-foot">
+      <div id="last-check">Not checked yet</div>
+      <div class="credit">Made by <b>CMK</b> · <span class="app-version"></span></div>
+    </div>
+  </aside>
+
+  <main>
+    <header class="top">
+      <svg class="logo top-logo" viewBox="0 0 32 32" aria-hidden="true">
+        <rect width="32" height="32" rx="8" fill="#04BF8A"/>
+        <path d="M6 17h5l2.5-6 4.5 12 2.5-6H26" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <h1 id="page-title">Overview</h1>
+      <div class="top-actions">
+        <button class="btn ghost hide-mobile" id="open-status">TorBox status page ↗</button>
+        <button class="btn primary" id="check-btn"><span class="spin" hidden></span><span class="lbl">Check now</span></button>
+      </div>
+    </header>
+
+    <!-- OVERVIEW -->
+    <section class="page" id="page-overview">
+      <div class="verdict lv-idle" id="verdict">
+        <div class="v-icon" id="v-icon"></div>
+        <div class="v-body">
+          <div class="v-title" id="v-title">Ready</div>
+          <div class="v-msg" id="v-msg">Press Check now to test every service at once.</div>
+        </div>
+        <div class="v-meta" id="v-meta"></div>
+      </div>
+      <div id="ov-statements"></div>
+      <div class="grid" id="cards"></div>
+    </section>
+
+    <!-- ANNOUNCEMENTS -->
+    <section class="page" id="page-news" hidden>
+      <div id="announce-banner"></div>
+      <div id="news-list"></div>
+      <h2 class="h2">Official component status</h2>
+      <div id="components"></div>
+    </section>
+
+    <!-- CDNS -->
+    <section class="page" id="page-cdns" hidden>
+      <div class="card pad cdn-head">
+        <div>
+          <div class="card-title">Every TorBox CDN region</div>
+          <div class="muted small">Ping = time to open a connection (best of 4). File = time until the server starts sending its test file. Speed test downloads for up to 8 seconds.</div>
+        </div>
+        <button class="btn ghost" id="cdn-refresh">Ping again</button>
+      </div>
+      <div class="card table-card">
+        <table class="cdn">
+          <thead><tr><th>Region</th><th class="host">Server</th><th class="pagest">Status page</th><th class="num">Ping</th><th class="num file">File</th><th class="result">Result</th><th class="num">Speed</th></tr></thead>
+          <tbody id="cdn-body"><tr><td colspan="7" class="empty">Run a check to ping every CDN.</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ADDONS -->
+    <section class="page" id="page-addons" hidden>
+      <div class="card pad" style="margin-bottom:14px">
+        <div class="card-title">The scrapers inside your AIOStreams</div>
+        <div class="muted small">Every check asks AIOStreams for a test title and records which addon returned streams, which returned nothing, and which reported an error.</div>
+      </div>
+      <div id="addons-body"></div>
+    </section>
+
+    <!-- TEST A TITLE -->
+    <section class="page" id="page-title" hidden>
+      <div class="card pad">
+        <div class="card-title">Does AIOStreams find streams for a specific title?</div>
+        <div class="muted small" style="margin:4px 0 14px">Paste an IMDb link or id. For a show, add season and episode: <code>tt0903747 1 1</code></div>
+        <form class="row" id="title-form">
+          <input id="title-input" placeholder="tt0111161 · imdb.com/title/tt0111161 · tt0903747 1 1" autocomplete="off" />
+          <button class="btn primary" type="submit" id="title-btn"><span class="spin" hidden></span><span class="lbl">Search</span></button>
+        </form>
+      </div>
+      <div id="title-result"></div>
+    </section>
+
+    <!-- ACCOUNTS -->
+    <section class="page" id="page-accounts" hidden>
+      <div class="grid two">
+        <div class="card pad" id="acct-torbox"></div>
+        <div class="card pad" id="acct-aio"></div>
+      </div>
+      <p class="muted small privacy">Your API key and password are stored only on this device, encrypted (Windows DPAPI on PC, the Android Keystore on phones). They are sent only to TorBox and to your own AIOStreams server — never anywhere else.</p>
+    </section>
+
+    <!-- ABOUT -->
+    <section class="page" id="page-about" hidden>
+      <div class="card pad about">
+        <svg class="logo about-logo" viewBox="0 0 32 32" aria-hidden="true">
+          <rect width="32" height="32" rx="8" fill="#04BF8A"/>
+          <path d="M6 17h5l2.5-6 4.5 12 2.5-6H26" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <div class="about-name">Stream Check</div>
+        <div class="muted"><span class="app-version"></span> · <span id="about-platform"></span></div>
+        <div class="about-credit">Made by <b>CMK</b></div>
+        <p>When something will not play, one tap tells you whether it is TorBox, a TorBox CDN, AIOStreams, one of its addons, Nuvio’s metadata services — or your own internet.</p>
+        <div class="row center">
+          <button class="btn primary" data-repo>GitHub page ↗</button>
+          <button class="btn ghost" data-url="https://status.torbox.app">TorBox status ↗</button>
+        </div>
+      </div>
+      <div class="card pad" style="margin-top:14px">
+        <div class="card-title" style="margin-bottom:8px">Good to know</div>
+        <ul class="plain">
+          <li>Free and open source. Stream Check has no server of its own and collects nothing.</li>
+          <li>Your logins never leave this device except to talk to TorBox and your own AIOStreams server.</li>
+          <li>Stream Check is an independent tool. It is not made by, or affiliated with, TorBox, AIOStreams or Nuvio.</li>
+        </ul>
+      </div>
+    </section>
+  </main>
+
+  <div class="toast" id="toast" hidden></div>
+  <script src="platform.js"></script>
+  <script src="core.js"></script>
+  <script src="ui.js"></script>
+</body>
+</html>

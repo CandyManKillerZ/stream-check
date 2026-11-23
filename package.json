@@ -1,0 +1,20 @@
+{
+  "name": "stream-check",
+  "version": "1.1.0",
+  "description": "Is TorBox, AIOStreams (and its addons) or Nuvio down? One tap tells you. Made by CMK.",
+  "private": true,
+  "license": "MIT",
+  "author": "CMK",
+  "scripts": {
+    "sync": "node scripts/sync-web.mjs && npx cap sync android",
+    "build:windows": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-windows.ps1",
+    "build:android": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-android.ps1"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.6.2",
+    "@capacitor/core": "^8.6.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.6.2"
+  }
+}
