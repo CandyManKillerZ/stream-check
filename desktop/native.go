@@ -24,7 +24,10 @@ type App struct{ ctx context.Context }
 
 func NewApp() *App { return &App{} }
 
-func (a *App) startup(ctx context.Context) { a.ctx = ctx }
+func (a *App) startup(ctx context.Context) {
+	a.ctx = ctx
+	go cleanupOldExe() // leftovers from a previous self-update (update.go)
+}
 
 var client = &http.Client{
 	Transport: &http.Transport{

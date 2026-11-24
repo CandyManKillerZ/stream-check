@@ -58,6 +58,15 @@ Requires Windows 10 or 11 with Microsoft Edge WebView2. It is already on almost 
 
 Requires Android 7.0 or newer.
 
+### Updates
+
+From 1.3.0 on, Stream Check updates itself. When a new version is on GitHub, a banner offers **Update now**:
+
+- **Windows:** the new version is downloaded, checked against the SHA-256 checksum GitHub publishes for the release, and installed when you click **Restart now**. Nothing is installed if the checksum does not match.
+- **Android:** the app downloads the new APK and opens Android's installer. The first time, Android asks you to allow "Install unknown apps" for Stream Check.
+
+The app asks GitHub for a new version at most **once an hour**. It never checks TorBox, AIOStreams or anything else by itself. **About → Check for updates** checks right away. Coming from 1.2.x or older? Install 1.3.0 once by hand; after that it updates itself.
+
 ## Signing in
 
 Open **Accounts** in the app.

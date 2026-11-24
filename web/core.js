@@ -683,6 +683,46 @@ const Core = (() => {
     return { torbox: !!clean.torboxKey, aio: !!clean.aioManifestUrl, aioMode: clean.aioMode };
   }
 
+  // ---------------------------------------------------------------- updates
+  // Same rules as ElderKeep's updater: api.github.com allows 60 anonymous
+  // requests/hour per IP (shared with everything else in the house), so the
+  // check runs at most once an hour and the attempt is stamped even when it
+  // fails. "Check for updates" in About can force it.
+  const RELEASES_API = 'https://api.github.com/repos/CandyManKillerZ/stream-check/releases/latest';
+  const UPDATE_KEY = 'updateCheck';
+  const UPDATE_EVERY_MS = 60 * 60 * 1000;
+  const semverGt = (a, b) => {
+    const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
+    for (let i = 0; i < 3; i++) { if ((pa[i] || 0) > (pb[i] || 0)) return true; if ((pa[i] || 0) < (pb[i] || 0)) return false; }
+    return false;
+  };
+
+  async function checkForUpdate(force = false) {
+    const pattern = Native.updateAsset;
+    if (!pattern) return { available: false, unsupported: true, current: APP_VERSION };
+    let cached = null;
+    try { cached = JSON.parse((await Native.get(UPDATE_KEY)) || 'null'); } catch {}
+    let rel = cached?.rel || null, error = '';
+    if (force || !cached || Date.now() - cached.at >= UPDATE_EVERY_MS) {
+      const r = await get(RELEASES_API, { headers: { Accept: 'application/vnd.github+json' }, timeoutMs: 15000 });
+      if (r.ok && r.json?.tag_name) {
+        const body = String(r.json.body || '');
+        rel = {
+          tag: r.json.tag_name, title: r.json.name || r.json.tag_name, page: r.json.html_url,
+          notes: body.split(/\n### (Downloads|SHA-256)/)[0].trim().slice(0, 2000),
+          assets: (r.json.assets || []).map((a) => ({ name: a.name, url: a.browser_download_url, digest: a.digest || '', size: a.size })),
+        };
+      } else error = r.status === 403 || r.status === 429 ? 'GitHub is rate-limiting this network — try again in an hour' : r.why;
+      await Native.set(UPDATE_KEY, JSON.stringify({ at: Date.now(), rel })); // stamp even on failure
+    }
+    if (!rel) return { available: false, error, current: APP_VERSION };
+    const latest = rel.tag.replace(/^v/i, '');
+    return {
+      available: semverGt(latest, APP_VERSION), latest, current: APP_VERSION, error,
+      title: rel.title, notes: rel.notes, page: rel.page, asset: rel.assets.find((a) => pattern.test(a.name)) || null,
+    };
+  }
+
   // ---------------------------------------------------------------- account actions
   async function loginTorbox(key) {
     key = String(key || '').trim();
@@ -718,7 +758,7 @@ const Core = (() => {
   return {
     accounts, runChecks, refreshCDNs, speedTest, testTitle,
     loginTorbox, logoutTorbox, torboxAccount, loginAio, loginAioManifest, logoutAio,
-    parsePair, pairWithPC,
+    parsePair, pairWithPC, checkForUpdate,
     getAnimeTest: async () => (await Native.get('animeTest')) === '1',
     setAnimeTest: (on) => Native.set('animeTest', on ? '1' : ''),
     savedInstance: async () => (await cfg()).aioInstance,

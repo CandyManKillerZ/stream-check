@@ -65,6 +65,8 @@
       </div>
     </header>
 
+    <div id="update-banner" hidden></div>
+
     <!-- OVERVIEW -->
     <section class="page" id="page-overview">
       <div class="verdict lv-idle" id="verdict">
@@ -153,6 +155,10 @@
           <button class="btn primary" data-repo>GitHub page ↗</button>
           <button class="btn ghost" data-url="https://status.torbox.app">TorBox status ↗</button>
         </div>
+      </div>
+      <div class="card pad update-card" style="margin-top:14px">
+        <div><div class="card-title">Updates</div><div class="muted small" id="update-status">Stream Check checks GitHub for a new version at most once an hour.</div></div>
+        <button class="btn ghost" id="update-check"><span class="spin" hidden></span><span class="lbl">Check for updates</span></button>
       </div>
       <div class="card pad" style="margin-top:14px">
         <div class="card-title" style="margin-bottom:8px">Good to know</div>

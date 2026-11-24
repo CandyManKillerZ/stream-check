@@ -625,6 +625,130 @@ async function phonePair(text) {
   }
 }
 
+// ---------------------------------------------------------------- updates
+// Windows: download + verify in the app, then "Restart now" swaps the .exe.
+// Android: the native Updater plugin downloads the APK and opens the installer
+// (same flow and error texts as ElderKeep's).
+let updateInfo = null;
+const fmtMB = (b) => (b / 1e6).toFixed(1) + ' MB';
+const notesText = (md) => String(md || '')
+  .replace(/^#{1,6}\s*/gm, '').replace(/\*\*([^*]+)\*\*/g, '$1').replace(/\*([^*]+)\*/g, '$1')
+  .replace(/`([^`]+)`/g, '$1').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').trim();
+
+async function checkUpdates(force) {
+  const btn = $('update-check');
+  if (force) busy(btn, true);
+  try {
+    const u = await Core.checkForUpdate(force);
+    updateInfo = u;
+    const st = $('update-status');
+    if (u.unsupported) st.textContent = 'Updates are installed from the GitHub page in this version.';
+    else if (u.available) st.innerHTML = `<span class="ms-good">Version ${esc(u.latest)} is available</span> — you have ${esc(u.current)}.`;
+    else if (u.error && force) st.innerHTML = `<span class="ms-mid">Could not check: ${esc(u.error)}</span>`;
+    else st.textContent = `You have the latest version (${u.current}).`;
+    renderUpdateBanner();
+    if (force && !u.available && !u.error) toast('Stream Check is up to date');
+  } finally { if (force) busy(btn, false); }
+}
+
+function renderUpdateBanner() {
+  const el = $('update-banner');
+  const u = updateInfo;
+  if (!u?.available || sessionStorage.getItem('sc_hide_update') === u.latest) { el.hidden = true; return; }
+  el.hidden = false;
+  el.innerHTML = `<div class="update-banner">
+    <div class="ub-text"><b>Stream Check ${esc(u.latest)} is available</b> <span class="muted small">— you have ${esc(u.current)}</span></div>
+    <button class="btn primary sm" id="ub-install">${Native.name === 'android' ? 'Install update' : 'Update now'}</button>
+    <button class="ub-x" id="ub-hide" title="Hide until next start">×</button>
+  </div>`;
+  $('ub-install').onclick = openUpdateModal;
+  $('ub-hide').onclick = () => { sessionStorage.setItem('sc_hide_update', u.latest); el.hidden = true; };
+}
+
+function openUpdateModal() {
+  const u = updateInfo;
+  if (!u) return;
+  const manual = !u.asset;
+  modal(`<div class="pair-modal">
+    <div class="card-title">Update to Stream Check ${esc(u.latest)}</div>
+    <div class="muted small">You have ${esc(u.current)}${u.asset?.size ? ` · download ${fmtMB(u.asset.size)}` : ''}</div>
+    ${u.notes ? `<div class="update-notes">${esc(notesText(u.notes))}</div>` : ''}
+    <div id="upd-area">
+      ${manual ? '<div class="muted small" style="margin-bottom:12px">This release has no file for this device — open the release page instead.</div>' : ''}
+      <div class="row center">
+        ${manual ? '' : '<button class="btn primary" id="upd-go">Download and install</button>'}
+        <button class="btn ghost" id="upd-page">Release page ↗</button>
+        <button class="btn ghost" id="upd-later">Later</button>
+      </div>
+    </div>
+  </div>`);
+  $('upd-page').onclick = () => Native.open(u.page);
+  $('upd-later').onclick = closeModal;
+  if (!manual) $('upd-go').onclick = () => (Native.name === 'android' ? androidInstall(u) : windowsInstall(u));
+}
+
+async function windowsInstall(u) {
+  const area = $('upd-area');
+  area.innerHTML = `<div class="progress"><div id="upd-bar"></div></div><div class="muted small" id="upd-msg">Downloading…</div>`;
+  Native.onUpdateProgress((p) => {
+    const bar = $('upd-bar'), msg = $('upd-msg');
+    if (!bar || !msg) return;
+    const pct = p.total > 0 ? Math.min(100, (p.got / p.total) * 100) : 0;
+    bar.style.width = pct.toFixed(0) + '%';
+    msg.textContent = `Downloading… ${fmtMB(p.got)}${p.total > 0 ? ' of ' + fmtMB(p.total) : ''}`;
+  });
+  const r = await Native.downloadUpdate(u.asset.url, u.asset.digest);
+  if (!r.ok) return updateFailed(u, r.error);
+  area.innerHTML = `<div class="muted" style="margin:12px 0">Downloaded and verified (SHA-256 matches the release). Stream Check restarts on the new version.</div>
+    <div class="row center"><button class="btn primary" id="upd-restart">Restart now</button><button class="btn ghost" id="upd-later2">Later</button></div>`;
+  $('upd-later2').onclick = closeModal;
+  $('upd-restart').onclick = async () => {
+    $('upd-restart').disabled = true;
+    const res = await Native.installUpdate();
+    if (!res.ok) updateFailed(u, res.error);
+  };
+}
+
+const ANDROID_UPDATE_ERR = {
+  permission: 'Allow "Install unknown apps" for Stream Check in the screen that just opened, then come back — the install continues by itself.',
+  download: 'The download failed. Check your connection and try again.',
+  missing: 'The download failed. Check your connection and try again.',
+  installer: 'Could not open the installer — use Release page to download it in your browser.',
+};
+let androidUpdating = false;
+async function androidInstall(u) {
+  if (androidUpdating) return; // a second tap must not start a second download (GitHub abuse limit)
+  androidUpdating = true;
+  const area = $('upd-area');
+  area.innerHTML = `<div style="margin:12px 0"><span class="spin dim"></span> Downloading ${esc(u.latest)}… Android opens the installer when it is done (you can follow it in the notifications).</div>
+    <div class="row center"><button class="btn ghost" id="upd-close">Close</button></div>`;
+  $('upd-close').onclick = closeModal;
+  try {
+    const ok = await Native.androidUpdate(u.asset.url, u.latest, (reason) => {
+      androidUpdating = false;
+      updateFailed(u, ANDROID_UPDATE_ERR[reason] || ANDROID_UPDATE_ERR.download, reason === 'permission' ? 'warn' : 'down');
+    });
+    if (!ok) { androidUpdating = false; Native.open(u.asset.url); }
+  } catch (e) {
+    androidUpdating = false;
+    updateFailed(u, ANDROID_UPDATE_ERR.download);
+  }
+}
+
+function updateFailed(u, text, level = 'down') {
+  modal(`<div class="pair-modal">
+    <div class="v-icon pair-result lv-${level}">${ICONS[level]}</div>
+    <div class="card-title">${level === 'warn' ? 'One more step' : 'Update did not finish'}</div>
+    <div class="muted" style="margin:6px 0 16px">${esc(text)}</div>
+    <div class="row center"><button class="btn primary" id="upd-retry">Try again</button><button class="btn ghost" id="upd-page2">Release page ↗</button><button class="btn ghost" id="upd-close2">Close</button></div>
+  </div>`);
+  $('upd-retry').onclick = openUpdateModal;
+  $('upd-page2').onclick = () => Native.open(u.page);
+  $('upd-close2').onclick = closeModal;
+}
+
+$('update-check').addEventListener('click', () => checkUpdates(true));
+
 // ---------------------------------------------------------------- start
 window.addEventListener('error', (e) => setVerdict({ level: 'down', title: 'Stream Check hit a bug', message: String(e.message) }));
 window.addEventListener('unhandledrejection', (e) => setVerdict({ level: 'down', title: 'Stream Check hit a bug', message: String(e.reason?.message || e.reason) }));
@@ -653,4 +777,6 @@ window.addEventListener('unhandledrejection', (e) => setVerdict({ level: 'down',
   }
   // No automatic check: every check hits TorBox, every CDN and a real
   // AIOStreams search, so it only runs when the user presses Check now.
+  // The update check is different — one request to GitHub, at most hourly.
+  checkUpdates(false).catch(() => {});
 })();

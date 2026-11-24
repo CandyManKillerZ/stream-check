@@ -1,5 +1,5 @@
 'use strict';
-// Platform adapter — the only file that knows where Stream Check is running:
+// Platform adapter â€” the only file that knows where Stream Check is running:
 //   windows : Wails shell (desktop/native.go, pair.go)   window.go.main.App.*
 //   android : Capacitor shell (NetProbe Java plugin)     window.Capacitor.Plugins.*
 //   browser : plain page for UI development (CORS will block most checks)
@@ -22,7 +22,7 @@ const Native = (() => {
     if (/reset/i.test(s)) return 'connection reset';
     if (/SSL|TLS|certificate|handshake/i.test(s)) return 'secure connection failed (TLS)';
     if (/Failed to fetch|NetworkError/i.test(s)) return 'blocked or unreachable';
-    return s.length > 120 ? s.slice(0, 120) + '…' : s;
+    return s.length > 120 ? s.slice(0, 120) + 'â€¦' : s;
   }
 
   const windows = {
@@ -30,6 +30,7 @@ const Native = (() => {
     init() {
       window.runtime.EventsOn('speed', (s) => speedListeners.get(s.id)?.(s));
       window.runtime.EventsOn('pair', (e) => pairListeners.forEach((cb) => cb(e)));
+      window.runtime.EventsOn('update-progress', (e) => updateListeners.forEach((cb) => cb(e)));
     },
     http: (o) => wailsApp().HTTP({
       method: o.method || 'GET', url: o.url, timeoutMs: o.timeoutMs || 15000,
@@ -46,10 +47,14 @@ const Native = (() => {
     open: (u) => wailsApp().OpenURL(u),
     deviceName: async () => 'PC',
     onLink() {},
-    // Wi-Fi pairing — this PC hands its sign-ins to a phone (desktop/pair.go)
+    // Wi-Fi pairing â€” this PC hands its sign-ins to a phone (desktop/pair.go)
     startPairing: () => wailsApp().StartPairing(),
     answerPairing: (allow) => wailsApp().AnswerPairing(allow),
     stopPairing: () => wailsApp().StopPairing(),
+    // Self-update (desktop/update.go): download + verify, then swap and restart.
+    updateAsset: /-windows-x64\.exe$/i,
+    downloadUpdate: (url, sha) => wailsApp().DownloadUpdate(url, sha),
+    installUpdate: () => wailsApp().InstallUpdate(),
   };
 
   const android = {
@@ -91,14 +96,25 @@ const Native = (() => {
     async deviceName() {
       try { return (await cap().Plugins.NetProbe.deviceName()).name || 'Android phone'; } catch { return 'Android phone'; }
     },
-    // streamcheck://pair?d=… links (from the QR code's web page) open the app.
+    // streamcheck://pair?d=â€¦ links (from the QR code's web page) open the app.
     onLink(cb) {
       const App = cap().Plugins.App;
       if (!App) return;
       App.addListener('appUrlOpen', (e) => e?.url && cb(e.url));
       App.getLaunchUrl?.().then((r) => r?.url && cb(r.url)).catch(() => {});
     },
+    // Self-update (UpdaterPlugin.java, same as ElderKeep): DownloadManager â†’ system installer.
+    updateAsset: /-android\.apk$/i,
+    async androidUpdate(url, version, onError) {
+      const U = cap().Plugins.Updater;
+      if (!U?.downloadAndInstall) return false;
+      if (!androidUpdateListener && U.addListener) androidUpdateListener = await U.addListener('updateError', (ev) => androidUpdateError?.(ev?.reason || 'download'));
+      androidUpdateError = onError;
+      await U.downloadAndInstall({ url, version });
+      return true;
+    },
   };
+  let androidUpdateListener = null, androidUpdateError = null;
 
   const browser = {
     name: 'browser',
@@ -124,6 +140,7 @@ const Native = (() => {
   };
 
   const pairListeners = new Set();
+  const updateListeners = new Set();
   let impl = null;
   async function ready() {
     if (impl) return impl;
@@ -153,5 +170,10 @@ const Native = (() => {
     answerPairing: (allow) => impl.answerPairing(allow),
     stopPairing: () => impl.stopPairing?.(),
     onPair: (cb) => pairListeners.add(cb),
+    get updateAsset() { return impl?.updateAsset || null; },
+    downloadUpdate: (url, sha) => impl.downloadUpdate(url, sha),
+    installUpdate: () => impl.installUpdate(),
+    androidUpdate: (url, version, onError) => impl.androidUpdate?.(url, version, onError) ?? Promise.resolve(false),
+    onUpdateProgress: (cb) => updateListeners.add(cb),
   };
 })();
