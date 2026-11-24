@@ -47,6 +47,8 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- A short buzz when a check finishes -->
+    <uses-permission android:name="android.permission.VIBRATE" />
     <!-- Camera: only used to scan the pairing QR code from the PC -->
     <uses-permission android:name="android.permission.CAMERA" />
     <!-- In-app updater: lets Stream Check open the installer for its own update APK -->

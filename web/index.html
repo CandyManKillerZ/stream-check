@@ -25,24 +25,28 @@
         <svg viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg><span>Overview</span>
       </button>
       <button class="nav" data-page="news">
-        <svg viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4z"/><path d="M8 9h8M8 12h5"/></svg><span>Announcements</span>
+        <svg viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4z"/><path d="M8 9h8M8 12h5"/></svg><span class="lbl-long">Announcements</span><span class="lbl-short">News</span>
         <span class="badge" id="news-badge" hidden>0</span>
       </button>
       <button class="nav" data-page="cdns">
-        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.2 3 14.8 0 18M12 3c-3 3.2-3 14.8 0 18"/></svg><span>TorBox CDNs</span>
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.2 3 14.8 0 18M12 3c-3 3.2-3 14.8 0 18"/></svg><span class="lbl-long">TorBox CDNs</span><span class="lbl-short">CDNs</span>
       </button>
       <button class="nav" data-page="addons">
         <svg viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><path d="M16.5 13v7M13 16.5h7"/></svg><span>Addons</span>
       </button>
-      <button class="nav" data-page="title">
+      <button class="nav more-item" data-page="title">
         <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><span>Test a title</span>
       </button>
-      <button class="nav" data-page="accounts">
+      <button class="nav more-item" data-page="accounts">
         <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg><span>Accounts</span>
         <span class="dot-mini" id="acct-dot" hidden></span>
       </button>
-      <button class="nav" data-page="about">
+      <button class="nav more-item" data-page="about">
         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5h.01"/></svg><span>About</span>
+      </button>
+      <button class="nav mobile-only" data-page="more">
+        <svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg><span>More</span>
+        <span class="dot-mini" id="more-dot" hidden></span>
       </button>
     </nav>
 
@@ -53,6 +57,7 @@
   </aside>
 
   <main>
+    <div class="ptr" id="ptr"><span class="ptr-icon" id="ptr-icon">↓</span><span id="ptr-text">Pull to check everything</span></div>
     <header class="top">
       <svg class="logo top-logo" viewBox="0 0 32 32" aria-hidden="true">
         <rect width="32" height="32" rx="8" fill="#04BF8A"/>
@@ -171,6 +176,15 @@
     </section>
   </main>
 
+  <div class="sheet-wrap" id="sheet" hidden>
+    <div class="sheet">
+      <div class="sheet-grip"></div>
+      <button class="sheet-item" data-go="title"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><span><b>Test a title</b><small>Does one movie or episode find streams?</small></span></button>
+      <button class="sheet-item" data-go="accounts"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg><span><b>Accounts</b><small>TorBox and AIOStreams sign-in</small></span><span class="dot-mini" id="sheet-acct-dot" hidden></span></button>
+      <button class="sheet-item" data-go="about"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5h.01"/></svg><span><b>About</b><small>Version, updates, credits</small></span></button>
+      <button class="sheet-item" data-url="https://status.torbox.app"><svg viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg><span><b>TorBox status page</b><small>Opens status.torbox.app</small></span></button>
+    </div>
+  </div>
   <div class="modal" id="modal" hidden><div class="modal-box card" id="modal-box"></div></div>
   <div class="toast" id="toast" hidden></div>
   <script src="vendor/jsQR.js"></script>

@@ -68,20 +68,97 @@ function busy(btn, on) {
 
 // ---------------------------------------------------------------- navigation
 const TITLES = { overview: 'Overview', news: 'TorBox announcements', cdns: 'TorBox CDNs', addons: 'AIOStreams addons', title: 'Test a title', accounts: 'Accounts', about: 'About' };
-function showPage(page) {
-  document.querySelectorAll('.nav').forEach((b) => b.classList.toggle('active', b.dataset.page === page));
-  document.querySelectorAll('.page').forEach((p) => (p.hidden = p.id !== `page-${page}`));
+// Page order for swiping (same as the sidebar). On phones the last three live
+// in the More sheet, but swiping still walks through all of them.
+const PAGE_ORDER = ['overview', 'news', 'cdns', 'addons', 'title', 'accounts', 'about'];
+const MORE_PAGES = new Set(['title', 'accounts', 'about']);
+let currentPage = 'overview';
+
+function showPage(page, dir = 0) {
+  if (page === 'more') return openSheet();
+  closeSheet();
+  const changed = page !== currentPage;
+  currentPage = page;
+  document.querySelectorAll('.nav').forEach((b) => b.classList.toggle('active', b.dataset.page === page || (b.dataset.page === 'more' && MORE_PAGES.has(page))));
+  document.querySelectorAll('.page').forEach((p) => {
+    p.hidden = p.id !== `page-${page}`;
+    p.classList.remove('slide-l', 'slide-r');
+  });
+  const el = $(`page-${page}`);
+  if (changed && dir && el) { void el.offsetWidth; el.classList.add(dir > 0 ? 'slide-l' : 'slide-r'); }
   $('page-title').textContent = TITLES[page];
   document.querySelector('main').scrollTop = 0;
   if (page === 'accounts') renderAccounts(true);
 }
-document.querySelectorAll('.nav').forEach((b) => b.addEventListener('click', () => showPage(b.dataset.page)));
+document.querySelectorAll('.nav').forEach((b) => b.addEventListener('click', () => {
+  const to = b.dataset.page;
+  showPage(to, to === 'more' ? 0 : Math.sign(PAGE_ORDER.indexOf(to) - PAGE_ORDER.indexOf(currentPage)));
+}));
 document.addEventListener('click', (e) => {
   const g = e.target.closest('[data-go]');
   if (g) { e.preventDefault(); showPage(g.dataset.go); }
   const u = e.target.closest('[data-url]');
-  if (u) { e.preventDefault(); Native.open(u.dataset.url); }
+  if (u) { e.preventDefault(); closeSheet(); Native.open(u.dataset.url); }
 });
+
+function openSheet() { $('sheet').hidden = false; requestAnimationFrame(() => $('sheet').classList.add('open')); }
+function closeSheet() { $('sheet').classList.remove('open'); $('sheet').hidden = true; }
+$('sheet').addEventListener('click', (e) => { if (e.target.id === 'sheet') closeSheet(); });
+
+// ---- swipe left / right between pages (phones)
+// Swipes that start within 24 px of the screen edge are left to Android's own
+// back gesture; swipes inside tables, inputs or popups are ignored.
+(function swipeNav() {
+  const main = document.querySelector('main');
+  let x0 = 0, y0 = 0, t0 = 0, track = false;
+  main.addEventListener('touchstart', (e) => {
+    const t = e.touches[0];
+    track = e.touches.length === 1 && t.clientX > 24 && t.clientX < window.innerWidth - 24
+      && !e.target.closest('input, textarea, .table-card, .update-notes, .modal, .sheet-wrap');
+    x0 = t.clientX; y0 = t.clientY; t0 = Date.now();
+  }, { passive: true });
+  main.addEventListener('touchend', (e) => {
+    if (!track) return;
+    track = false;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - x0, dy = t.clientY - y0;
+    if (Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.8 || Date.now() - t0 > 700) return;
+    const i = PAGE_ORDER.indexOf(currentPage) + (dx < 0 ? 1 : -1);
+    if (i < 0 || i >= PAGE_ORDER.length) return;
+    showPage(PAGE_ORDER[i], dx < 0 ? 1 : -1);
+    Native.vibrate(8);
+  }, { passive: true });
+})();
+
+// ---- pull down to check (phones)
+(function pullToCheck() {
+  const main = document.querySelector('main');
+  const ptr = $('ptr');
+  const TRIGGER = 80;
+  let y0 = null, pull = 0, armed = false;
+  main.addEventListener('touchstart', (e) => {
+    y0 = main.scrollTop <= 0 && !state.running && e.touches.length === 1 && !e.target.closest('.modal, .sheet-wrap') ? e.touches[0].clientY : null;
+    pull = 0; armed = false;
+  }, { passive: true });
+  main.addEventListener('touchmove', (e) => {
+    if (y0 === null) return;
+    pull = Math.max(0, e.touches[0].clientY - y0);
+    if (main.scrollTop > 0) { pull = 0; }
+    const h = Math.min(pull * 0.5, 70);
+    ptr.style.height = h + 'px';
+    ptr.style.opacity = Math.min(1, h / 40);
+    const nowArmed = pull >= TRIGGER;
+    if (nowArmed !== armed) { armed = nowArmed; if (armed) Native.vibrate(10); }
+    ptr.classList.toggle('armed', armed);
+    $('ptr-text').textContent = armed ? 'Release to check everything' : 'Pull to check everything';
+  }, { passive: true });
+  main.addEventListener('touchend', () => {
+    if (y0 === null) return;
+    y0 = null;
+    ptr.style.height = '0px'; ptr.style.opacity = 0; ptr.classList.remove('armed');
+    if (armed) { showPage('overview', 0); runCheck(); }
+  }, { passive: true });
+})();
 $('open-status').addEventListener('click', () => Native.open('https://status.torbox.app'));
 
 // ---------------------------------------------------------------- full check
@@ -109,6 +186,8 @@ async function runCheck() {
     if (v) {
       setVerdict(v);
       $('last-check').textContent = `Last check ${fmtTime(v.at, false)}`;
+      saveSnapshot(v);
+      Native.vibrate(v.level === 'ok' ? 20 : [30, 60, 30]);
     }
   } catch (e) {
     setVerdict({ level: 'down', title: 'The check itself failed', message: String(e?.message || e) });
@@ -120,6 +199,30 @@ async function runCheck() {
   }
 }
 $('check-btn').addEventListener('click', runCheck);
+
+// The last check's results are kept on this device only, so reopening the app
+// shows them straight away (with their age) instead of an empty screen.
+const SNAP_KEY = 'sc_last_check';
+function saveSnapshot(v) {
+  try {
+    localStorage.setItem(SNAP_KEY, JSON.stringify({
+      v, sections: state.sections, status: state.status, cdns: [...state.cdns.values()], addons: state.addons,
+    }));
+  } catch {}
+}
+function clearSnapshot() { try { localStorage.removeItem(SNAP_KEY); } catch {} }
+function restoreSnapshot() {
+  let s = null;
+  try { s = JSON.parse(localStorage.getItem(SNAP_KEY) || 'null'); } catch {}
+  if (!s?.v) return;
+  state.sections = s.sections || {};
+  state.status = s.status || null;
+  state.cdns = new Map((s.cdns || []).map((r) => [r.region, r]));
+  state.addons = s.addons || null;
+  setVerdict({ ...s.v, message: `${s.v.message} — result from ${ago(s.v.at)}; press Check now for a fresh one.` });
+  $('last-check').textContent = `Last check ${fmtTime(s.v.at)}`;
+  renderCards(); renderStatus(); renderCDNTable(); renderAddons();
+}
 
 function setVerdict(v) {
   const lv = v.level || 'idle';
@@ -383,7 +486,10 @@ $('title-form').addEventListener('submit', async (e) => {
 // ---------------------------------------------------------------- accounts
 async function refreshAccounts() {
   state.accounts = await Core.accounts();
-  $('acct-dot').hidden = state.accounts.torbox && !!state.accounts.aioMode;
+  const missing = !(state.accounts.torbox && state.accounts.aioMode);
+  $('acct-dot').hidden = !missing;
+  $('more-dot').hidden = !missing;
+  $('sheet-acct-dot').hidden = !missing;
   renderAddons();
   return state.accounts;
 }
@@ -397,7 +503,7 @@ async function renderAccounts(fetchInfo) {
   if (a.torbox) {
     tb.innerHTML = tbHead(true) + `<div class="kv" id="tb-kv"><div class="k">Account</div><div class="v muted">loading…</div></div>
       <button class="btn danger" id="tb-logout">Sign out</button>`;
-    $('tb-logout').onclick = async () => { await Core.logoutTorbox(); state.torboxInfo = null; toast('Signed out of TorBox'); renderAccounts(); };
+    $('tb-logout').onclick = async () => { await Core.logoutTorbox(); state.torboxInfo = null; clearSnapshot(); toast('Signed out of TorBox'); renderAccounts(); };
     if (fetchInfo || !state.torboxInfo) {
       try { state.torboxInfo = await Core.torboxAccount(); } catch (e) { state.torboxInfo = { error: String(e?.message || e) }; }
     }
@@ -438,7 +544,7 @@ async function renderAccounts(fetchInfo) {
       <div class="k">Signed in with</div><div class="v">${a.aioMode === 'login' ? `UUID ${esc(a.aioUuid)} + password` : 'manifest URL'}</div>
       <div class="k">Addon checks</div><div class="v">${a.aioMode === 'login' ? '<span class="ms-good">on — every addon is checked</span>' : '<span class="ms-mid">off — sign out and sign in with UUID + password to check each addon</span>'}</div>
     </div><button class="btn danger" id="aio-logout">Sign out</button>`;
-    $('aio-logout').onclick = async () => { await Core.logoutAio(); state.addons = null; toast('Signed out of AIOStreams'); renderAccounts(); };
+    $('aio-logout').onclick = async () => { await Core.logoutAio(); state.addons = null; clearSnapshot(); toast('Signed out of AIOStreams'); renderAccounts(); };
   } else {
     const tab = state.aioTab;
     const inst = a.aioInstance || (await Core.savedInstance());
@@ -498,11 +604,12 @@ function renderPairCard(a) {
       <button class="btn primary" id="pair-start" ${has ? '' : 'disabled'}>Show QR code</button>
     </div>`;
     $('pair-start').onclick = openPcPairing;
-  } else if (Native.name === 'android') {
+  } else if (Native.name === 'android' && !(a.torbox && a.aioMode)) {
+    // Only useful while this phone still misses a sign-in.
     el.innerHTML = `<div class="card pad pair-card">
       <div class="pair-icon">${PAIR_ICON}</div>
-      <div class="pair-text"><div class="card-title">Sign in from your PC</div>
-        <div class="muted small">Already signed in on your PC? Open Stream Check there → Accounts → <b>Show QR code</b>, then scan it here. Both devices must be on the same Wi-Fi.</div></div>
+      <div class="pair-text"><div class="card-title">Copy sign-ins from your PC</div>
+        <div class="muted small">Signed in on your PC already? On the PC open Stream Check → Accounts → <b>Show QR code</b>, then scan it here. Both devices must be on the same Wi-Fi.</div></div>
       <button class="btn primary" id="pair-scan">Scan QR code</button>
     </div>`;
     $('pair-scan').onclick = openScanner;
@@ -749,6 +856,23 @@ function updateFailed(u, text, level = 'down') {
 
 $('update-check').addEventListener('click', () => checkUpdates(true));
 
+// ---------------------------------------------------------------- Android back button
+let exitAsking = false;
+function onBackButton() {
+  if (!$('modal').hidden) {
+    if (exitAsking) { exitAsking = false; closeModal(); return; }   // back on the exit question = No
+    stopScanner?.(); Native.stopPairing(); stopPairTimer?.(); closeModal(); return;
+  }
+  if (!$('sheet').hidden) return closeSheet();
+  exitAsking = true;
+  modal(`<div class="pair-modal">
+    <div class="card-title">Exit Stream Check?</div>
+    <div class="row center" style="margin-top:16px"><button class="btn primary" id="exit-yes">Yes</button><button class="btn ghost" id="exit-no">No</button></div>
+  </div>`);
+  $('exit-yes').onclick = () => Native.exitApp();
+  $('exit-no').onclick = () => { exitAsking = false; closeModal(); };
+}
+
 // ---------------------------------------------------------------- start
 window.addEventListener('error', (e) => setVerdict({ level: 'down', title: 'Stream Check hit a bug', message: String(e.message) }));
 window.addEventListener('unhandledrejection', (e) => setVerdict({ level: 'down', title: 'Stream Check hit a bug', message: String(e.reason?.message || e.reason) }));
@@ -762,6 +886,8 @@ window.addEventListener('unhandledrejection', (e) => setVerdict({ level: 'down',
   renderCards();
   renderStatus();
   Native.onPair(onPairEvent);
+  Native.onBack(onBackButton);
+  restoreSnapshot();
   const animeToggle = $('anime-toggle');
   animeToggle.checked = await Core.getAnimeTest();
   animeToggle.onchange = async () => {

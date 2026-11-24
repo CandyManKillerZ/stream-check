@@ -58,6 +58,8 @@ Requires Windows 10 or 11 with Microsoft Edge WebView2. It is already on almost 
 
 Requires Android 7.0 or newer.
 
+On the phone: **swipe left/right** to move between pages, **pull down** on any page to check everything, and **More** (bottom right) holds Test a title, Accounts and About. The back button asks before closing the app, and the last results are still there when you reopen it.
+
 ### Updates
 
 From 1.3.0 on, Stream Check updates itself. When a new version is on GitHub, a banner offers **Update now**:

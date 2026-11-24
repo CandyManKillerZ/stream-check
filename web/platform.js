@@ -5,7 +5,7 @@
 //   browser : plain page for UI development (CORS will block most checks)
 // Every function resolves (never rejects); failures come back as `error` text.
 
-const APP_VERSION = '1.3.0';
+const APP_VERSION = '1.4.0';
 
 const Native = (() => {
   const wailsApp = () => window.go?.main?.App;
@@ -113,6 +113,11 @@ const Native = (() => {
       await U.downloadAndInstall({ url, version });
       return true;
     },
+    // Android back button / back gesture. Registering a listener turns off
+    // Capacitor's default (go back in history, else quit) so the UI decides.
+    onBack(cb) { cap().Plugins.App?.addListener('backButton', cb); },
+    exitApp: () => cap().Plugins.App?.exitApp(),
+    vibrate: (ms) => { try { navigator.vibrate?.(ms); } catch {} },
   };
   let androidUpdateListener = null, androidUpdateError = null;
 
@@ -175,5 +180,8 @@ const Native = (() => {
     installUpdate: () => impl.installUpdate(),
     androidUpdate: (url, version, onError) => impl.androidUpdate?.(url, version, onError) ?? Promise.resolve(false),
     onUpdateProgress: (cb) => updateListeners.add(cb),
+    onBack: (cb) => impl.onBack?.(cb),
+    exitApp: () => impl.exitApp?.(),
+    vibrate: (ms) => impl.vibrate?.(ms),
   };
 })();
