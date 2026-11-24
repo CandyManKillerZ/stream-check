@@ -30,7 +30,7 @@ When you stream with **Nuvio + TorBox + AIOStreams**, a video that won't start c
 | **TorBox statements** | When TorBox announces **maintenance or an incident**, their statement is shown in full, with the whole timeline of updates and what is affected. Planned maintenance shows up before it starts. |
 | **Every TorBox CDN** | All regions: ping, how fast each server starts sending a file, what the status page says about it, your **closest** region, and an on-demand **speed test** per region. |
 | **AIOStreams** | Whether your AIOStreams server is up, whether your config still loads, and a **real test search**: the same request Nuvio makes. |
-| **AIOStreams addons** | Every scraper/addon in your config (Comet, Torrentio, MediaFusion, StremThru, …): which ones return streams, which return nothing and which are **failing**, with the error each one reports. |
+| **AIOStreams addons** | Every scraper in your config (Comet, Torrentio, MediaFusion, StremThru, …): how many streams each one **found**, how many of those **reach Nuvio** after AIOStreams removes duplicates and applies your filters, and which ones **time out or fail**, with the error. Subtitle and metadata addons are recognised and skipped; anime-only scrapers can get their own **anime test**. |
 | **Nuvio** | The metadata services Nuvio relies on (TMDB, Cinemeta) and the Nuvio website. |
 | **Wi-Fi pairing** | Signed in on your PC? Scan one QR code with your phone and it is signed in too: sent directly over your Wi-Fi, encrypted, only after you click Allow. |
 | **Test a title** | Paste an IMDb link or id (or a show with season + episode) to see whether *that exact title* finds streams, and from which addons. |
@@ -96,8 +96,11 @@ Both devices must be on the same Wi-Fi. The first time, Windows asks whether Str
 **The Nuvio website shows "unreachable". Is Nuvio broken?**
 Not necessarily. Nuvio runs on your device; its website being down does not stop playback. That is why it is shown as *info*, not as an error.
 
-**An addon says "No results". Is it broken?**
-Usually not. Many addons only cover some content (anime-only, usenet-only, …). An addon is only marked **Failing** when AIOStreams reports an error for it.
+**An addon found hundreds of streams but only 1 is "in Nuvio". Is it broken?**
+No. When several scrapers find the same release, AIOStreams keeps only one copy, and your filters remove the rest. The **Found** column shows what each scraper really returned. To get those numbers, Stream Check sends a temporary copy of your config, with duplicate removal and filters switched off, to **your own** AIOStreams server for that one search. Nothing is saved.
+
+**What do Skipped, Normal and Found nothing mean?**
+*Skipped*: a subtitles or metadata addon, which never returns streams. *Normal*: nothing found is expected (anime-only scraper on a movie, your TorBox library, live TV). *Found nothing*: a general scraper returned nothing for a popular movie, which usually means it is down or blocked. *Failing*: AIOStreams reported an error or timeout for it.
 
 **Why is "Ping" a TCP ping?**
 Most CDNs block classic ICMP ping. Stream Check measures how long it takes to open a connection, which is exactly what your player does first.

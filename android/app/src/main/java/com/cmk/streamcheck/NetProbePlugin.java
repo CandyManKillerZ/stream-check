@@ -40,7 +40,7 @@ import javax.crypto.spec.GCMParameterSpec;
 public class NetProbePlugin extends Plugin {
     private static final String KEY_ALIAS = "streamcheck_secrets";
     private static final String PREFS = "streamcheck_secure";
-    private static final String UA = "StreamCheck/1.2 (Android)";
+    private static final String UA = "StreamCheck/1.3 (Android)";
     private final ExecutorService pool = Executors.newFixedThreadPool(10);
 
     // ------------------------------------------------------------ TCP ping

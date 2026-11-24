@@ -5,7 +5,7 @@
 //   browser : plain page for UI development (CORS will block most checks)
 // Every function resolves (never rejects); failures come back as `error` text.
 
-const APP_VERSION = '1.2.1';
+const APP_VERSION = '1.3.0';
 
 const Native = (() => {
   const wailsApp = () => window.go?.main?.App;

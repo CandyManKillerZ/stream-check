@@ -18,7 +18,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-const userAgent = "StreamCheck/1.2 (+https://github.com/CandyManKillerZ/stream-check)"
+const userAgent = "StreamCheck/1.3 (+https://github.com/CandyManKillerZ/stream-check)"
 
 type App struct{ ctx context.Context }
 
@@ -51,7 +51,8 @@ type HTTPResponse struct {
 }
 
 // HTTP performs one request. Failures come back as a short readable string
-// in Error, never as a thrown error. Bodies are capped at 8 MB.
+// in Error, never as a thrown error. Bodies are capped at 32 MB (an
+// AIOStreams raw search with duplicate removal off can return thousands of results).
 func (a *App) HTTP(r HTTPRequest) HTTPResponse {
 	if !strings.HasPrefix(r.URL, "https://") && !strings.HasPrefix(r.URL, "http://") {
 		return HTTPResponse{Error: "bad URL"}
@@ -82,7 +83,7 @@ func (a *App) HTTP(r HTTPRequest) HTTPResponse {
 		return HTTPResponse{Error: friendlyErr(err), Ms: int(time.Since(t0).Milliseconds())}
 	}
 	defer res.Body.Close()
-	b, err := io.ReadAll(io.LimitReader(res.Body, 8<<20))
+	b, err := io.ReadAll(io.LimitReader(res.Body, 32<<20))
 	out := HTTPResponse{Status: res.StatusCode, Body: string(b), Ms: int(time.Since(t0).Milliseconds())}
 	if err != nil {
 		out.Error = friendlyErr(err)

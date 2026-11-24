@@ -316,14 +316,79 @@ const Core = (() => {
   const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
   const sameAddon = (a, b) => { const x = norm(a), y = norm(b); return !!x && !!y && (x === y || x.includes(y) || y.includes(x)); };
 
-  // Signed in with UUID + password: the AIOStreams Search API reports which
-  // addon every stream came from, and every addon's errors separately.
-  async function searchApiTest(c, type, id, presetsP) {
-    const res = { mode: 'login', query: id, type, ok: false, error: '', count: 0, instant: 0, secs: 0, errors: [], top: [], addons: [], statistics: [] };
+  // ---- addon inventory -------------------------------------------------
+  // Which addons are enabled, what each one provides (streams / subtitles /
+  // metadata), and whether it is anime-only, live TV, or your TorBox library.
+  const ANIME_TYPES = new Set(['seadex', 'neko-bt', 'anime-tosho-new', 'animetosho', 'tsukihime', 'nyaa', 'anime-kitsu', 'animekitsu']);
+  const ANIME_TITLE = { type: 'series', id: 'tt22248376:1:1', name: 'Frieren S1E1' };
+  let presetMeta = null;               // preset ID -> { name, resources, description }
+  const manifestResources = new Map(); // custom addon manifest URL -> resources
+
+  function setPresetMeta(statusJson) {
+    const list = statusJson?.data?.settings?.presets;
+    if (Array.isArray(list)) presetMeta = Object.fromEntries(list.map((p) => [p.ID, { name: p.NAME, resources: p.SUPPORTED_RESOURCES || [], description: p.DESCRIPTION || '' }]));
+  }
+
+  async function loadAddons(c) {
+    const [user, status] = await Promise.all([
+      get(`${c.aioInstance}/api/v1/user`, { headers: basic(c.aioUuid, c.aioPassword), timeoutMs: 20000 }),
+      presetMeta ? null : get(`${c.aioInstance}/api/v1/status`),
+    ]);
+    if (status) setPresetMeta(status.json);
+    const userData = user.json?.data?.userData;
+    if (!Array.isArray(userData?.presets)) return { list: [], userData: null, error: `could not load your addon list (${user.json?.error?.message || user.why})` };
+    const list = await Promise.all(userData.presets.filter((p) => p.enabled !== false).map(async (p) => {
+      const meta = presetMeta?.[p.type] || {};
+      const name = p.options?.name || meta.name || p.type;
+      let res = p.options?.resources?.length ? p.options.resources : meta.resources;
+      const url = p.options?.manifestUrl;
+      if ((!res || !res.length) && url) {
+        if (!manifestResources.has(url)) {
+          const m = await get(url, { timeoutMs: 8000 });
+          manifestResources.set(url, (m.json?.resources || []).map((r) => (typeof r === 'string' ? r : r?.name)).filter(Boolean));
+        }
+        res = manifestResources.get(url);
+      }
+      res = res || [];
+      const kind = !res.length || res.includes('stream') ? 'stream' : res.includes('subtitles') ? 'subtitles' : 'metadata';
+      const anime = ANIME_TYPES.has(p.type) || /anime/i.test(meta.description || '') || /anime|seadex|nyaa|tosho|neko/i.test(name);
+      const special = p.type === 'library' ? 'library' : (/\b(live|sports?|iptv)\b/i.test(name) || /-tv$/.test(p.type)) ? 'live' : '';
+      return { id: p.instanceId, name, type: p.type, kind, anime, special };
+    }));
+    return { list, userData, error: '' };
+  }
+
+  // A temporary, trimmed copy of the user's config for one search only:
+  // duplicate removal, filters and display settings off, stream addons only.
+  // Sent only to the user's own AIOStreams server; nothing is saved anywhere.
+  const DROP_KEYS = /^(formatter|catalogModifications|variants|healthChecks|appliedTemplates|addonName|addonDescription|addonLogo|addonBackground|selOverrides|regexOverrides|ranked\w*|preferred\w*|excluded\w*|included\w*|required\w*|exclude\w*|include\w*|require\w*|resultLimits|size|bitrate|digitalReleaseFilter|groups|dynamicAddonFetching|statistics|posterService|customPosterUrl|usePoster\w*|rpdbApiKey|topPosterApiKey|aioratings\w*|openposterdb\w*|synced\w*|precache\w*|seederRangeTypes|ageRangeTypes|autoPlay|preloadStreams|cacheAndPlay)$/;
+  function rawConfig(userData, streamIds) {
+    const u = {};
+    for (const [k, v] of Object.entries(userData)) if (!DROP_KEYS.test(k)) u[k] = v;
+    u.presets = userData.presets.filter((p) => streamIds.has(p.instanceId));
+    u.deduplicator = { enabled: false };
+    u.formatter = { id: 'gdrive' }; // required field; the user's own formatter is ~50 KB and only changes how names look
+    return u;
+  }
+
+  async function rawSearch(c, addons, type, id) {
+    const streamIds = new Set(addons.list.filter((a) => a.kind === 'stream').map((a) => a.id));
+    const cfgCopy = rawConfig(addons.userData, streamIds);
     const q = `type=${encodeURIComponent(type)}&id=${encodeURIComponent(id)}`;
-    const [r, presets] = await Promise.all([
+    const r = await get(`${c.aioInstance}/api/v1/search?${q}`, { headers: { 'X-AIOStreams-User-Data': b64(JSON.stringify(cfgCopy)) }, timeoutMs: 60000 });
+    const d = r.json?.data;
+    if (!r.ok || !d || !Array.isArray(d.results)) return { ok: false, error: r.json?.error?.message || r.why, results: [], errors: [], secs: r.ms / 1000 };
+    return { ok: true, error: '', results: d.results.filter((x) => x.type !== 'statistic' && x.type !== 'error'), errors: d.errors || [], secs: r.ms / 1000 };
+  }
+
+  // Signed in with UUID + password: the normal search shows what Nuvio gets;
+  // the raw search shows what each addon really found.
+  async function searchApiTest(c, type, id, opts = {}) {
+    const res = { mode: 'login', query: id, type, ok: false, error: '', count: 0, instant: 0, secs: 0, errors: [], top: [], addons: [], statistics: [], rawOk: false, rawError: '', animeQuery: '' };
+    const q = `type=${encodeURIComponent(type)}&id=${encodeURIComponent(id)}`;
+    const [r, addons] = await Promise.all([
       get(`${c.aioInstance}/api/v1/search?${q}`, { headers: basic(c.aioUuid, c.aioPassword), timeoutMs: 60000 }),
-      presetsP || enabledAddons(c),
+      loadAddons(c),
     ]);
     res.secs = r.ms / 1000;
     const d = r.json?.data;
@@ -333,53 +398,85 @@ const Core = (() => {
       return res;
     }
     res.ok = true;
-    const rows = (presets.list || []).map((p) => ({ name: p.name, type: p.type, count: 0, cached: 0, errors: [] }));
+
+    const rows = addons.list.map((a) => ({ ...a, found: 0, foundCached: 0, shown: 0, cached: 0, animeFound: null, errors: [] }));
     const rowFor = (name) => {
       let row = rows.find((x) => sameAddon(x.name, name));
-      if (!row) { row = { name: name || 'Unknown addon', type: '', count: 0, cached: 0, errors: [] }; rows.push(row); }
+      if (!row) { row = { name: name || 'Unknown addon', type: '', kind: 'stream', anime: false, special: '', found: 0, foundCached: 0, shown: 0, cached: 0, animeFound: null, errors: [] }; rows.push(row); }
       return row;
     };
+    const addError = (e, list) => {
+      const text = cleanLine(`${e.title || ''}: ${e.description || ''}`.replace(/^: /, ''));
+      const match = rows.find((x) => sameAddon(x.name, e.title) || (x.name && norm((e.title || '') + (e.description || '')).includes(norm(x.name))));
+      const msg = cleanLine(e.description || e.title);
+      if (match && !match.errors.includes(msg)) match.errors.push(msg);
+      if (list) list.push({ addon: match?.name || '', text });
+    };
+
     for (const s of d.results) {
       if (s.type === 'statistic' || s.type === 'error') continue;
       res.count++;
       if (s.cached) res.instant++;
       const row = rowFor(s.addon);
-      row.count++;
+      row.shown++;
       if (s.cached) row.cached++;
       if (res.top.length < 4) {
-        const res_ = s.parsedFile?.resolution ? `${s.parsedFile.resolution} · ` : '';
-        res.top.push(`${res_}${cleanLine(s.filename || s.folderName || s.message || 'stream')}${s.addon ? '  —  ' + s.addon : ''}${s.cached ? '  ⚡' : ''}`);
+        const reso = s.parsedFile?.resolution ? `${s.parsedFile.resolution} · ` : '';
+        res.top.push(`${reso}${cleanLine(s.filename || s.folderName || s.message || 'stream')}${s.addon ? '  —  ' + s.addon : ''}${s.cached ? '  ⚡' : ''}`);
       }
     }
-    for (const e of d.errors || []) {
-      const text = cleanLine(`${e.title || ''}: ${e.description || ''}`.replace(/^: /, ''));
-      const match = rows.find((x) => sameAddon(x.name, e.title) || (x.name && norm(e.title + e.description).includes(norm(x.name))));
-      if (match) match.errors.push(cleanLine(e.description || e.title));
-      res.errors.push({ addon: match?.name || '', text });
-    }
+    for (const e of d.errors || []) addError(e, res.errors);
     res.statistics = (d.statistics || []).map((s) => cleanLine(`${s.title}: ${s.description}`));
-    res.addons = rows.map((x) => ({
-      ...x,
-      level: x.errors.length ? (x.count ? 'warn' : 'down') : x.count ? 'ok' : 'info',
-      detail: x.errors.length ? x.errors[0] : x.count ? `${x.count} stream${x.count === 1 ? '' : 's'}${x.cached ? ` · ${x.cached} instant ⚡` : ''}` : 'no results for this title',
-    }));
-    if (presets.error) res.addonsNote = presets.error;
-    return res;
-  }
 
-  let presetNames = null;
-  async function enabledAddons(c) {
-    const [user, status] = await Promise.all([
-      get(`${c.aioInstance}/api/v1/user`, { headers: basic(c.aioUuid, c.aioPassword), timeoutMs: 20000 }),
-      presetNames ? null : get(`${c.aioInstance}/api/v1/status`),
-    ]);
-    if (status?.json?.data?.settings?.presets) presetNames = Object.fromEntries(status.json.data.settings.presets.map((p) => [p.ID, p.NAME]));
-    const presets = user.json?.data?.userData?.presets;
-    if (!Array.isArray(presets)) return { list: [], error: `could not load your addon list (${user.json?.error?.message || user.why})` };
-    return {
-      list: presets.filter((p) => p.enabled !== false).map((p) => ({ type: p.type, name: p.options?.name || presetNames?.[p.type] || p.type })),
-      error: '',
-    };
+    // Raw search: what each stream addon found before duplicates and filters.
+    if (addons.userData && addons.list.some((a) => a.kind === 'stream')) {
+      const raw = await rawSearch(c, addons, type, id);
+      res.rawOk = raw.ok; res.rawError = raw.error;
+      for (const s of raw.results) { const row = rowFor(s.addon); row.found++; if (s.cached) row.foundCached++; }
+      for (const e of raw.errors) addError(e, null);
+      if (opts.anime && addons.list.some((a) => a.kind === 'stream' && a.anime)) {
+        const an = await rawSearch(c, addons, ANIME_TITLE.type, ANIME_TITLE.id);
+        res.animeQuery = ANIME_TITLE.name;
+        if (an.ok) {
+          for (const row of rows) if (row.kind === 'stream') row.animeFound = 0;
+          for (const s of an.results) rowFor(s.addon).animeFound++;
+        } else res.animeError = an.error;
+      }
+    }
+
+    const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+    res.addons = rows.map((x) => {
+      const found = res.rawOk ? x.found : x.shown;
+      let level, detail;
+      if (x.kind !== 'stream') {
+        level = 'skip';
+        detail = x.kind === 'subtitles' ? 'Subtitles addon — not a stream source, nothing to test' : 'Metadata / catalog addon — not a stream source, nothing to test';
+      } else if (x.errors.length && !found && x.animeFound > 0) {
+        level = 'warn'; // failed on the movie, but answered the anime test: up, just slow or flaky
+        detail = `${x.errors[0]} on the movie test — but it found ${plural(x.animeFound, 'stream')} in the anime test, so it is up (slow or flaky)`;
+      } else if (x.errors.length) {
+        level = found ? 'warn' : 'down';
+        detail = x.errors[0];
+      } else if (found) {
+        level = 'ok';
+        detail = res.rawOk
+          ? `found ${plural(found, 'stream')}${x.foundCached ? ` (${x.foundCached} instant ⚡)` : ''} · ${x.shown ? `${x.shown} shown in Nuvio` : 'all hidden as duplicates or by your filters'}`
+          : `${plural(found, 'stream')}${x.cached ? ` · ${x.cached} instant ⚡` : ''}`;
+      } else if (x.anime) {
+        if (x.animeFound > 0) { level = 'ok'; detail = `anime only — found ${plural(x.animeFound, 'stream')} in the anime test (${ANIME_TITLE.name})`; }
+        else if (x.animeFound === 0) { level = 'warn'; detail = `anime only — found nothing in the anime test (${ANIME_TITLE.name}) either`; }
+        else { level = 'info'; detail = 'anime only — nothing for a movie is normal (turn on the anime test to check it)'; }
+      } else if (x.special === 'library') {
+        level = 'info'; detail = 'only lists what is already in your TorBox cloud — empty is normal';
+      } else if (x.special === 'live') {
+        level = 'info'; detail = 'live TV / sports addon — not used for movies';
+      } else {
+        level = 'warn'; detail = 'found nothing for this title — it may be down, blocked or slow';
+      }
+      return { ...x, found, level, detail };
+    });
+    if (addons.error) res.addonsNote = addons.error;
+    return res;
   }
 
   async function aioCheck(c) {
@@ -393,11 +490,11 @@ const Core = (() => {
     if (status.ok && status.json?.data?.version) items.push({ level: 'ok', label: 'Server', detail: `${host} · v${status.json.data.version} · ${ms(status)}` });
     else if (!status.status) return { items: [{ level: 'down', label: 'Server', detail: `${host} — ${status.why}`, blame: 'aio' }], addons: null };
     else items.push({ level: 'warn', label: 'Server', detail: `${host} — status ${status.why}` });
-    if (status.json?.data?.settings?.presets) presetNames = Object.fromEntries(status.json.data.settings.presets.map((p) => [p.ID, p.NAME]));
+    setPresetMeta(status.json);
 
     let sr;
     if (login) {
-      sr = await searchApiTest({ ...c, aioInstance: origin }, TEST_TITLE.type, TEST_TITLE.id);
+      sr = await searchApiTest({ ...c, aioInstance: origin }, TEST_TITLE.type, TEST_TITLE.id, { anime: (await Native.get('animeTest')) === '1' });
       if (!sr.ok && /disabled|not enabled|403/i.test(sr.error)) sr = null; // search API turned off on this server
     }
     if (!sr) {
@@ -434,12 +531,20 @@ const Core = (() => {
     if (!sr.ok) return [{ level: 'down', label: 'Addons', detail: sr.error }];
     const rows = sr.addons;
     if (!rows.length) return [{ level: 'info', label: 'Addons', detail: sr.addonsNote || 'no enabled addons found' }];
-    const failing = rows.filter((r) => r.level === 'down').map((r) => r.name);
-    const erroring = rows.filter((r) => r.level === 'warn').map((r) => r.name);
-    const working = rows.filter((r) => r.level === 'ok').length;
-    const out = [{ level: failing.length ? 'warn' : erroring.length ? 'warn' : 'ok', label: 'Addons', detail: `${working} of ${rows.length} returned streams` }];
+    const streams = rows.filter((r) => r.kind === 'stream');
+    const failing = streams.filter((r) => r.level === 'down').map((r) => r.name);
+    const empty = streams.filter((r) => r.level === 'warn' && !r.errors.length).map((r) => r.name);
+    const erroring = streams.filter((r) => r.level === 'warn' && r.errors.length).map((r) => r.name);
+    const working = streams.filter((r) => r.level === 'ok').length;
+    const others = rows.length - streams.length;
+    const out = [{
+      level: failing.length || empty.length || erroring.length ? 'warn' : 'ok', label: 'Stream addons',
+      detail: `${working} of ${streams.length} working${others ? ` · ${others} subtitle/metadata addon${others === 1 ? '' : 's'} skipped` : ''}`,
+    }];
     if (failing.length) out.push({ level: 'down', label: 'Failing', detail: failing.join(', '), blame: 'addon-down' });
     if (erroring.length) out.push({ level: 'warn', label: 'With errors', detail: erroring.join(', ') });
+    if (empty.length) out.push({ level: 'warn', label: 'Found nothing', detail: empty.join(', ') });
+    if (!sr.rawOk && sr.rawError) out.push({ level: 'info', label: 'Raw counts', detail: `unavailable (${sr.rawError}) — showing counts after duplicates` });
     return out;
   }
 
@@ -614,6 +719,8 @@ const Core = (() => {
     accounts, runChecks, refreshCDNs, speedTest, testTitle,
     loginTorbox, logoutTorbox, torboxAccount, loginAio, loginAioManifest, logoutAio,
     parsePair, pairWithPC,
+    getAnimeTest: async () => (await Native.get('animeTest')) === '1',
+    setAnimeTest: (on) => Native.set('animeTest', on ? '1' : ''),
     savedInstance: async () => (await cfg()).aioInstance,
   };
 })();

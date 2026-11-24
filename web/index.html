@@ -108,7 +108,9 @@
     <section class="page" id="page-addons" hidden>
       <div class="card pad" style="margin-bottom:14px">
         <div class="card-title">The scrapers inside your AIOStreams</div>
-        <div class="muted small">Every check asks AIOStreams for a test title and records which addon returned streams, which returned nothing, and which reported an error.</div>
+        <div class="muted small">Every check asks AIOStreams for a test movie and records what each scraper found, what reached Nuvio, and which reported an error. Subtitle and metadata addons are listed but not tested — they never return streams.</div>
+        <label class="switch-row"><input type="checkbox" id="anime-toggle" /><span class="switch"></span>
+          <span>Also test anime addons with an anime episode <span class="muted small">(one extra search per check)</span></span></label>
       </div>
       <div id="addons-body"></div>
     </section>

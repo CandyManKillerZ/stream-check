@@ -297,13 +297,31 @@ $('cdn-refresh').addEventListener('click', async () => {
 });
 
 // ---------------------------------------------------------------- addons
+function addonPill(a) {
+  if (a.level === 'skip') return '<span class="pill">Skipped</span>';
+  if (a.level === 'info') return '<span class="pill lv-info">Normal</span>';
+  if (a.level === 'warn') return `<span class="pill lv-warn">${a.errors?.length ? 'Errors' : 'Found nothing'}</span>`;
+  return `<span class="pill lv-${a.level}">${{ ok: 'Working', down: 'Failing' }[a.level]}</span>`;
+}
+
 function addonTableHTML(sr) {
+  const anime = sr.addons.some((a) => a.animeFound !== null && a.animeFound !== undefined);
+  const order = { down: 0, warn: 1, ok: 2, info: 3, skip: 4 };
+  const rows = [...sr.addons].sort((x, y) => order[x.level] - order[y.level]);
+  const n = (a, v) => (a.kind && a.kind !== 'stream' ? '<span class="muted">—</span>' : v);
   return `<div class="card table-card"><table class="addons">
-    <thead><tr><th>Addon</th><th>Result</th><th class="num">Streams</th><th class="num">Instant ⚡</th></tr></thead>
-    <tbody>${sr.addons.map((a) => `<tr>
+    <thead><tr><th>Addon</th><th>Result</th>
+      <th class="num" title="${sr.rawOk ? 'Everything this addon found, before duplicate removal and your filters' : 'Streams shown after duplicate removal'}">${sr.rawOk ? 'Found' : 'Streams'}</th>
+      ${sr.rawOk ? '<th class="num" title="How many of them made it to Nuvio">In Nuvio</th>' : ''}
+      <th class="num">Instant ⚡</th>
+      ${anime ? `<th class="num" title="Anime test: ${esc(sr.animeQuery)}">Anime test</th>` : ''}</tr></thead>
+    <tbody>${rows.map((a) => `<tr class="${a.level === 'skip' ? 'dim' : ''}">
       <td><span class="dot lv-${a.level}"></span> <b>${esc(a.name)}</b>${a.type && a.type !== a.name ? ` <span class="muted small">${esc(a.type)}</span>` : ''}</td>
-      <td class="res-cell"><span class="pill lv-${a.level}">${{ ok: 'Working', warn: 'Errors', down: 'Failing', info: 'No results' }[a.level]}</span> <span class="res">${esc(a.detail)}</span></td>
-      <td class="num">${a.count}</td><td class="num">${a.cached}</td>
+      <td class="res-cell">${addonPill(a)} <span class="res">${esc(a.detail)}</span></td>
+      <td class="num">${n(a, a.found ?? a.count ?? 0)}</td>
+      ${sr.rawOk ? `<td class="num">${n(a, a.shown)}</td>` : ''}
+      <td class="num">${n(a, sr.rawOk ? a.foundCached : a.cached)}</td>
+      ${anime ? `<td class="num">${a.animeFound === null || a.animeFound === undefined ? '<span class="muted">—</span>' : a.animeFound}</td>` : ''}
     </tr>`).join('')}</tbody></table></div>`;
 }
 
@@ -322,11 +340,11 @@ function renderAddons() {
   if (!sr.ok) { el.innerHTML = `<div class="quiet"><span class="dot lv-down"></span>${esc(sr.error)}</div>`; return; }
   const general = sr.errors.filter((e) => !e.addon);
   el.innerHTML = `
-    <div class="muted small" style="margin-bottom:12px">Test search: <b>${esc(sr.type)} ${esc(sr.query)}</b> · ${sr.count} streams in ${sr.secs.toFixed(1)} s</div>
+    <div class="muted small" style="margin-bottom:12px">Test search: <b>${esc(sr.type)} ${esc(sr.query)}</b> · ${sr.count} streams reach Nuvio in ${sr.secs.toFixed(1)} s${sr.animeQuery ? ` · anime test: <b>${esc(sr.animeQuery)}</b>${sr.animeError ? ` <span class="ms-bad">(failed: ${esc(sr.animeError)})</span>` : ''}` : ''}${!sr.rawOk && sr.rawError ? ` · <span class="ms-mid">raw counts unavailable: ${esc(sr.rawError)}</span>` : ''}</div>
     ${sr.addons.length ? addonTableHTML(sr) : `<div class="quiet">${esc(sr.addonsNote || 'No enabled addons found in your config.')}</div>`}
     ${general.length ? `<div class="card pad" style="margin-top:14px"><div class="card-title" style="margin-bottom:6px">Other errors AIOStreams reported</div>${general.map((e) => `<div class="stream ms-bad">${esc(e.text)}</div>`).join('')}</div>` : ''}
     ${sr.statistics?.length ? `<div class="card pad" style="margin-top:14px"><div class="card-title" style="margin-bottom:6px">AIOStreams statistics</div>${sr.statistics.map((s) => `<div class="stream">${esc(s)}</div>`).join('')}</div>` : ''}
-    <p class="muted small">“No results” is normal for addons that do not cover this kind of title (anime-only, usenet-only, …).</p>`;
+    <p class="muted small"><b>Found</b> = everything the addon returned, asked with duplicate removal and your filters switched off (a temporary copy of your config, used for this one search and sent only to your own AIOStreams server). <b>In Nuvio</b> = what is left after AIOStreams removes duplicates and applies your filters — that is what you actually see.</p>`;
 }
 
 // ---------------------------------------------------------------- test a title
@@ -620,6 +638,12 @@ window.addEventListener('unhandledrejection', (e) => setVerdict({ level: 'down',
   renderCards();
   renderStatus();
   Native.onPair(onPairEvent);
+  const animeToggle = $('anime-toggle');
+  animeToggle.checked = await Core.getAnimeTest();
+  animeToggle.onchange = async () => {
+    await Core.setAnimeTest(animeToggle.checked);
+    toast(animeToggle.checked ? 'Anime test on — used from the next check' : 'Anime test off');
+  };
   Native.onLink((url) => { if (/pair/i.test(url)) { showPage('accounts'); phonePair(url); } });
   const a = await refreshAccounts();
   renderPairCard(a);
